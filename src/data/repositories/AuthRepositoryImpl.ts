@@ -1,3 +1,4 @@
+import * as Linking from 'expo-linking';
 import { User, UserRole } from '../../domain/entities/User';
 import { AuthRepository } from '../../domain/repositories/AuthRepository';
 import { supabase } from '../../lib/supabase';
@@ -45,6 +46,11 @@ export class AuthRepositoryImpl implements AuthRepository {
       role: roleMap[profile.rol] || 'student',
       firstName: profile.nombre.split(' ')[0] || '',
       lastName: profile.nombre.split(' ').slice(1).join(' ') || '',
+      parentId: profile.parent_id,
+      childId: profile.child_id,
+      grade: profile.grado,
+      section: profile.seccion,
+      gradeType: profile.tipo_grado,
     };
   }
 
@@ -70,6 +76,8 @@ export class AuthRepositoryImpl implements AuthRepository {
         data: {
           nombre,
           rol: supabaseRole,
+          parent_id: userData.parentId,
+          child_id: userData.childId,
         },
       },
     });
@@ -135,6 +143,25 @@ export class AuthRepositoryImpl implements AuthRepository {
       role: roleMap[profile.rol] || 'student',
       firstName: profile.nombre.split(' ')[0] || '',
       lastName: profile.nombre.split(' ').slice(1).join(' ') || '',
+      parentId: profile.parent_id,
+      childId: profile.child_id,
+      grade: profile.grado,
+      section: profile.seccion,
+      gradeType: profile.tipo_grado,
     };
+  }
+
+  async resetPassword(email: string): Promise<void> {
+    const redirectUrl = Linking.createURL('/');
+    console.log('Requesting password reset for:', email, 'redirecting to:', redirectUrl);
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: redirectUrl,
+    });
+
+    if (error) {
+      console.error('Reset password error:', error);
+      throw new Error(error.message);
+    }
   }
 }

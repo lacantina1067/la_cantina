@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { UserRepositoryImpl } from '../../../data/repositories/UserRepositoryImpl';
 import { User } from '../../../domain/entities/User';
@@ -29,16 +30,28 @@ const ProfileScreen = () => {
         await logout();
     };
 
-    const InfoRow = ({ icon, label, value }: { icon: string, label: string, value: string | undefined }) => (
-        <View style={styles.infoRow}>
+    const copyToClipboard = async (text: string, label: string) => {
+        await Clipboard.setStringAsync(text);
+        Alert.alert('¡Copiado!', `El ${label} ha sido copiado al portapapeles.`);
+    };
+
+    const InfoRow = ({ icon, label, value, onCopy }: { icon: string, label: string, value: string | undefined, onCopy?: boolean }) => (
+        <TouchableOpacity
+            style={styles.infoRow}
+            activeOpacity={onCopy ? 0.7 : 1}
+            onPress={onCopy && value ? () => copyToClipboard(value, label) : undefined}
+        >
             <View style={styles.iconContainer}>
                 <Ionicons name={icon as any} size={20} color={colors.primary} />
             </View>
             <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>{label}</Text>
-                <Text style={styles.infoValue}>{value || 'N/A'}</Text>
+                <View style={styles.labelRow}>
+                    <Text style={styles.infoLabel}>{label}</Text>
+                    {onCopy && <Ionicons name="copy-outline" size={12} color={colors.primary} style={{ marginLeft: 4 }} />}
+                </View>
+                <Text style={styles.infoValue} numberOfLines={1}>{value || 'N/A'}</Text>
             </View>
-        </View>
+        </TouchableOpacity>
     );
 
     return (
@@ -105,11 +118,11 @@ const ProfileScreen = () => {
                 <Text style={styles.sectionTitle}>Información Personal</Text>
                 <View style={styles.card}>
                     <InfoRow icon="mail" label="Correo Electrónico" value={user?.email} />
-                    <InfoRow icon="card" label="ID de Usuario" value={user?.id} />
+                    <InfoRow icon="card" label="ID de Usuario" value={user?.id} onCopy />
                     {user?.role === 'student' && (
                         <>
-                            <InfoRow icon="school" label="Grado" value="5to Año" />
-                            <InfoRow icon="people" label="Sección" value="A" />
+                            <InfoRow icon="school" label={user.gradeType || 'Año'} value={user.grade || 'Pendiente'} />
+                            <InfoRow icon="people" label="Sección" value={user.section || 'Pendiente'} />
                         </>
                     )}
                 </View>
@@ -121,6 +134,8 @@ const ProfileScreen = () => {
                     <View style={styles.card}>
                         <InfoRow icon="person" label="Nombre" value={`${child.firstName} ${child.lastName}`} />
                         <InfoRow icon="mail" label="Correo" value={child.email} />
+                        <InfoRow icon="school" label={child.gradeType || 'Año'} value={child.grade || 'Pendiente'} />
+                        <InfoRow icon="people" label="Sección" value={child.section || 'Pendiente'} />
                     </View>
                 </View>
             )}
@@ -266,6 +281,10 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: colors.textSecondary,
         marginBottom: 2,
+    },
+    labelRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
     },
     infoValue: {
         fontSize: 16,

@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList } from 'react-native';
-import { Order } from '../../../domain/entities/Order';
+import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { OrderRepositoryImpl } from '../../../data/repositories/OrderRepositoryImpl';
+import { Order } from '../../../domain/entities/Order';
 import { GetOrdersByStudentUseCase } from '../../../domain/usecases/GetOrdersByStudentUseCase';
 import Button from '../../components/Button';
-import { colors } from '../../theme/colors';
 import { useAuthStore } from '../../state/authStore';
+import { colors } from '../../theme/colors';
 
 const ParentApprovalScreen = () => {
   const { user } = useAuthStore();
@@ -14,7 +14,10 @@ const ParentApprovalScreen = () => {
 
   useEffect(() => {
     const fetchOrders = async () => {
-      if (!user || !user.childId) return;
+      if (!user || !user.childId) {
+        setLoading(false);
+        return;
+      }
       try {
         const orderRepository = new OrderRepositoryImpl();
         const getOrdersUseCase = new GetOrdersByStudentUseCase(orderRepository);

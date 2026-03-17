@@ -8,6 +8,9 @@ export interface User {
   lastName: string;
   // For students
   parentId?: string;
+  grade?: string;
+  section?: string;
+  gradeType?: 'Grado' | 'Año';
   // For parents
   childId?: string;
 }

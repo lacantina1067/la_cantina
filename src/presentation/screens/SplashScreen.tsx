@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Dimensions, Easing, StyleSheet, Text, View } from 'react-native';
-import { colors } from '../theme/colors';
 
 const { width } = Dimensions.get('window');
 const APP_NAME = "La Cantina";
@@ -11,8 +10,7 @@ const ICONS: Array<keyof typeof Ionicons.glyphMap> = ['fast-food', 'pizza', 'nut
 const SplashScreen = () => {
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const scaleAnim = useRef(new Animated.Value(0.8)).current;
-    const iconScaleAnim = useRef(new Animated.Value(1)).current;
-    const iconRotateAnim = useRef(new Animated.Value(0)).current;
+    const logoBounceAnim = useRef(new Animated.Value(0)).current;
 
     const [currentIconIndex, setCurrentIconIndex] = useState(0);
 
@@ -26,7 +24,7 @@ const SplashScreen = () => {
         Animated.parallel([
             Animated.timing(fadeAnim, {
                 toValue: 1,
-                duration: 800,
+                duration: 1000,
                 useNativeDriver: true,
             }),
             Animated.spring(scaleAnim, {
@@ -37,85 +35,51 @@ const SplashScreen = () => {
             }),
         ]).start();
 
-        // 2. Animación de letras (Ola continua)
+        // 2. Animación de rebote sutil para el logo
+        Animated.loop(
+            Animated.sequence([
+                Animated.timing(logoBounceAnim, {
+                    toValue: -10,
+                    duration: 1500,
+                    easing: Easing.inOut(Easing.sin),
+                    useNativeDriver: true,
+                }),
+                Animated.timing(logoBounceAnim, {
+                    toValue: 0,
+                    duration: 1500,
+                    easing: Easing.inOut(Easing.sin),
+                    useNativeDriver: true,
+                }),
+            ])
+        ).start();
+
+        // 3. Animación de letras (Ola suave)
         const animateLetters = () => {
-            const animations = letterAnims.map((anim, index) => {
+            const animations = letterAnims.map((anim) => {
                 return Animated.sequence([
                     Animated.timing(anim, {
-                        toValue: -15,
-                        duration: 200,
+                        toValue: -10,
+                        duration: 400,
                         useNativeDriver: true,
-                        easing: Easing.ease,
+                        easing: Easing.out(Easing.quad),
                     }),
                     Animated.timing(anim, {
                         toValue: 0,
-                        duration: 200,
+                        duration: 400,
                         useNativeDriver: true,
-                        easing: Easing.bounce,
+                        easing: Easing.in(Easing.quad),
                     }),
-                    Animated.delay(1200),
+                    Animated.delay(2000),
                 ]);
             });
 
             Animated.loop(
-                Animated.stagger(100, animations)
+                Animated.stagger(150, animations)
             ).start();
         };
 
-        // 3. Ciclo de iconos con animación de "pop"
-        const cycleIcons = () => {
-            let index = 0;
-            const interval = setInterval(() => {
-                // Animar salida (shrink)
-                Animated.sequence([
-                    Animated.timing(iconScaleAnim, {
-                        toValue: 0.01,
-                        duration: 200,
-                        useNativeDriver: true,
-                        easing: Easing.ease,
-                    }),
-                    Animated.timing(iconRotateAnim, {
-                        toValue: 1,
-                        duration: 0, // Reset instantáneo
-                        useNativeDriver: true,
-                    })
-                ]).start(() => {
-                    // Cambiar icono
-                    index = (index + 1) % ICONS.length;
-                    setCurrentIconIndex(index);
-
-                    // Animar entrada (pop con rotación)
-                    Animated.parallel([
-                        Animated.spring(iconScaleAnim, {
-                            toValue: 1,
-                            friction: 6,
-                            tension: 100,
-                            useNativeDriver: true,
-                        }),
-                        Animated.timing(iconRotateAnim, {
-                            toValue: 0,
-                            duration: 400,
-                            useNativeDriver: true,
-                        })
-                    ]).start();
-                });
-            }, 1200); // Cambia cada 1.2 segundos
-
-            return () => clearInterval(interval);
-        };
-
-        setTimeout(animateLetters, 500);
-        const clearIcons = cycleIcons();
-
-        return () => {
-            clearIcons();
-        };
+        setTimeout(animateLetters, 800);
     }, []);
-
-    const spin = iconRotateAnim.interpolate({
-        inputRange: [0, 1],
-        outputRange: ['0deg', '180deg']
-    });
 
     return (
         <View style={styles.container}>
@@ -131,30 +95,24 @@ const SplashScreen = () => {
                     styles.content,
                     {
                         opacity: fadeAnim,
-                        transform: [{ scale: scaleAnim }],
+                        transform: [
+                            { scale: scaleAnim },
+                            { translateY: logoBounceAnim }
+                        ],
                     },
                 ]}
             >
-                {/* Círculo decorativo pulsante */}
-                <View style={styles.circleDecoration}>
-                    <Animated.View style={[
-                        styles.iconWrapper,
-                        {
-                            transform: [
-                                { scale: iconScaleAnim },
-                                { rotate: spin }
-                            ]
-                        }
-                    ]}>
-                        <Ionicons
-                            name={ICONS[currentIconIndex]}
-                            size={90}
-                            color="#fff"
-                        />
-                    </Animated.View>
+                {/* Logo Principal */}
+                <View style={styles.logoWrapper}>
+                    <LinearGradient
+                        colors={['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.05)']}
+                        style={styles.logoCircle}
+                    >
+                        <Ionicons name="restaurant" size={80} color="#fff" />
+                    </LinearGradient>
                 </View>
 
-                {/* Contenedor de letras animadas */}
+                {/* Título de la App */}
                 <View style={styles.titleContainer}>
                     {APP_NAME.split('').map((letter, index) => (
                         <Animated.Text
@@ -171,8 +129,13 @@ const SplashScreen = () => {
                     ))}
                 </View>
 
+                <View style={styles.divider} />
                 <Text style={styles.subtitle}>Sabor que conecta</Text>
             </Animated.View>
+
+            <View style={styles.footer}>
+                <Text style={styles.footerText}>Disfruta la experiencia</Text>
+            </View>
         </View>
     );
 };
@@ -182,7 +145,6 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: colors.background,
     },
     background: {
         position: 'absolute',
@@ -195,50 +157,62 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
-    circleDecoration: {
-        width: 160,
-        height: 160,
-        borderRadius: 80,
-        backgroundColor: 'rgba(255,255,255,0.15)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 40,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.3)',
+    logoWrapper: {
+        marginBottom: 30,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.2,
-        shadowRadius: 20,
-        elevation: 10,
+        shadowOpacity: 0.3,
+        shadowRadius: 15,
+        elevation: 8,
     },
-    iconWrapper: {
-        width: 120,
-        height: 120,
+    logoCircle: {
+        width: 150,
+        height: 150,
+        borderRadius: 75,
         justifyContent: 'center',
         alignItems: 'center',
+        borderWidth: 2,
+        borderColor: 'rgba(255,255,255,0.3)',
     },
     titleContainer: {
         flexDirection: 'row',
         height: 60,
-        alignItems: 'center',
-        marginBottom: 8,
+        alignItems: 'baseline',
     },
     letter: {
-        fontSize: 42,
-        fontWeight: 'bold',
+        fontSize: 48,
+        fontWeight: '900',
         color: '#fff',
         letterSpacing: 2,
-        textShadowColor: 'rgba(0,0,0,0.2)',
-        textShadowOffset: { width: 0, height: 2 },
-        textShadowRadius: 4,
+        textShadowColor: 'rgba(0,0,0,0.3)',
+        textShadowOffset: { width: 0, height: 4 },
+        textShadowRadius: 6,
+    },
+    divider: {
+        width: 40,
+        height: 3,
+        backgroundColor: '#fff',
+        marginVertical: 15,
+        borderRadius: 2,
+        opacity: 0.8,
     },
     subtitle: {
-        fontSize: 18,
-        color: 'rgba(255,255,255,0.9)',
-        letterSpacing: 4,
-        fontWeight: '300',
+        fontSize: 16,
+        color: 'rgba(255,255,255,0.85)',
+        letterSpacing: 5,
+        fontWeight: '400',
         textTransform: 'uppercase',
     },
+    footer: {
+        position: 'absolute',
+        bottom: 50,
+    },
+    footerText: {
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: 12,
+        letterSpacing: 2,
+        textTransform: 'uppercase',
+    }
 });
 
 export default SplashScreen;

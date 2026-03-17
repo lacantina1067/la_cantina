@@ -2,9 +2,10 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, Easing, KeyboardAvoidingView, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, Dimensions, Easing, KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AuthRepositoryImpl } from '../../../data/repositories/AuthRepositoryImpl';
 import { LoginUseCase } from '../../../domain/usecases/LoginUseCase';
+import { ResetPasswordUseCase } from '../../../domain/usecases/ResetPasswordUseCase';
 import Button from '../../components/Button';
 import Input from '../../components/Input';
 import { useAuthStore } from '../../state/authStore';
@@ -28,10 +29,14 @@ const BACKGROUND_ICONS = [
 const LoginScreen = () => {
     const navigation = useNavigation();
     const { login } = useAuthStore();
-    const [email, setEmail] = useState('aplicacio@gmail.com');
-    const [password, setPassword] = useState('12345');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [showResetModal, setShowResetModal] = useState(false);
+    const [resetEmail, setResetEmail] = useState('');
+    const [resetLoading, setResetLoading] = useState(false);
+    const [isResetEmailSent, setIsResetEmailSent] = useState(false);
 
     // Animaciones
     // Inicializamos en 1 y 0 para que NO haya animación de entrada y se vea instantáneo
@@ -65,6 +70,11 @@ const LoginScreen = () => {
         Animated.parallel(animations).start();
     }, []);
 
+    const validateEmail = (email: string) => {
+        const re = /\S+@\S+\.\S+/;
+        return re.test(email);
+    };
+
     const handleLogin = async () => {
         setLoading(true);
         setError('');
@@ -77,6 +87,31 @@ const LoginScreen = () => {
             setError('Error al iniciar sesión. Por favor verifica tus credenciales.');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleResetPassword = async () => {
+        if (!resetEmail) {
+            setError('Por favor ingresa tu email');
+            return;
+        }
+
+        if (!validateEmail(resetEmail)) {
+            setError('Por favor ingresa un formato de email válido');
+            return;
+        }
+
+        setResetLoading(true);
+        setError('');
+        try {
+            const authRepository = new AuthRepositoryImpl();
+            const resetUseCase = new ResetPasswordUseCase(authRepository);
+            await resetUseCase.execute(resetEmail);
+            setIsResetEmailSent(true);
+        } catch (e: any) {
+            Alert.alert('Error', e.message || 'No se pudo enviar el correo de recuperación');
+        } finally {
+            setResetLoading(false);
         }
     };
 
@@ -143,10 +178,10 @@ const LoginScreen = () => {
 
                     <View style={styles.formContainer}>
                         <Input
-                            label="Correo electrónico"
+                            label="Email"
                             value={email}
                             onChangeText={setEmail}
-                            placeholder="correo@ejemplo.com"
+                            placeholder="Email"
                             autoCapitalize="none"
                             keyboardType="email-address"
                             icon="person-outline"
@@ -167,6 +202,13 @@ const LoginScreen = () => {
                             </View>
                         ) : null}
 
+                        <TouchableOpacity
+                            style={styles.forgotPasswordContainer}
+                            onPress={() => setShowResetModal(true)}
+                        >
+                            <Text style={styles.forgotPasswordText}>¿Olvidaste tu contraseña?</Text>
+                        </TouchableOpacity>
+
                         <View style={styles.buttonContainer}>
                             <Button title="Iniciar sesión" onPress={handleLogin} loading={loading} />
                         </View>
@@ -182,6 +224,101 @@ const LoginScreen = () => {
                     </View>
                 </View>
             </Animated.View>
+
+            {/* Modal de Restablecer Contraseña */}
+            <Modal
+                visible={showResetModal}
+                transparent
+                animationType="slide"
+                onRequestClose={() => {
+                    setShowResetModal(false);
+                    setTimeout(() => {
+                        setIsResetEmailSent(false);
+                        setError('');
+                    }, 300);
+                }}
+            >
+                <View style={styles.modalOverlay}>
+                    <LinearGradient
+                        colors={['#B8956A', '#A67C52', '#8C6239']}
+                        style={styles.modalContent}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                    >
+                        <View style={styles.modalHeader}>
+                            <Text style={[styles.modalTitle, { color: '#fff' }]}>Recuperar Contraseña</Text>
+                            <TouchableOpacity onPress={() => {
+                                setShowResetModal(false);
+                                setTimeout(() => {
+                                    setIsResetEmailSent(false);
+                                    setError('');
+                                }, 300);
+                            }}>
+                                <Ionicons name="close" size={28} color="#fff" />
+                            </TouchableOpacity>
+                        </View>
+
+                        {isResetEmailSent ? (
+                            <View style={styles.successContainer}>
+                                <View style={styles.successIconContainer}>
+                                    <View style={[styles.successGradient, { backgroundColor: '#fff' }]}>
+                                        <Ionicons name="checkmark" size={45} color="#4CAF50" />
+                                    </View>
+                                </View>
+                                <Text style={[styles.successTitle, { color: '#fff' }]}>¡Correo enviado!</Text>
+                                <Text style={[styles.successDescription, { color: 'rgba(255,255,255,0.9)' }]}>
+                                    Hemos enviado un enlace de recuperación a <Text style={styles.boldWhite}>{resetEmail}</Text>. Revisa tu bandeja de entrada.
+                                </Text>
+                                <TouchableOpacity
+                                    style={styles.whiteButton}
+                                    onPress={() => {
+                                        setShowResetModal(false);
+                                        setTimeout(() => {
+                                            setIsResetEmailSent(false);
+                                            setError('');
+                                        }, 300);
+                                    }}
+                                >
+                                    <Text style={styles.whiteButtonText}>Entendido</Text>
+                                </TouchableOpacity>
+                            </View>
+                        ) : (
+                            <>
+                                <Text style={[styles.modalDescription, { color: 'rgba(255,255,255,0.8)' }]}>
+                                    Ingresa tu email y te enviaremos las instrucciones para restablecer tu contraseña.
+                                </Text>
+
+                                <Input
+                                    label="Email"
+                                    value={resetEmail}
+                                    onChangeText={setResetEmail}
+                                    placeholder="Email"
+                                    autoCapitalize="none"
+                                    keyboardType="email-address"
+                                    icon="mail-outline"
+                                />
+
+                                {error ? (
+                                    <View style={[styles.errorContainer, { backgroundColor: 'rgba(255, 255, 255, 0.2)', marginBottom: 20 }]}>
+                                        <Ionicons name="alert-circle" size={20} color="#fff" />
+                                        <Text style={[styles.errorText, { color: '#fff' }]}>{error}</Text>
+                                    </View>
+                                ) : null}
+
+                                <TouchableOpacity
+                                    style={styles.whiteButton}
+                                    onPress={handleResetPassword}
+                                    disabled={resetLoading}
+                                >
+                                    <Text style={styles.whiteButtonText}>
+                                        {resetLoading ? 'Enviando...' : 'Enviar instrucciones'}
+                                    </Text>
+                                </TouchableOpacity>
+                            </>
+                        )}
+                    </LinearGradient>
+                </View>
+            </Modal>
         </KeyboardAvoidingView>
     );
 };
@@ -264,8 +401,18 @@ const styles = StyleSheet.create({
         fontSize: 14,
     },
     buttonContainer: {
-        marginTop: 8,
+        marginTop: 16,
         marginBottom: 24,
+    },
+    forgotPasswordContainer: {
+        alignItems: 'flex-end',
+        marginBottom: 20,
+        marginTop: -8,
+    },
+    forgotPasswordText: {
+        color: colors.primary,
+        fontSize: 14,
+        fontWeight: '600',
     },
     linkContainer: {
         alignItems: 'center',
@@ -276,6 +423,82 @@ const styles = StyleSheet.create({
     },
     linkHighlight: {
         color: colors.primary,
+        fontWeight: 'bold',
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        padding: 24,
+    },
+    modalContent: {
+        backgroundColor: '#fff',
+        borderRadius: 24,
+        padding: 24,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+        elevation: 5,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#2D3436',
+    },
+    modalDescription: {
+        fontSize: 14,
+        color: colors.textSecondary,
+        marginBottom: 24,
+        lineHeight: 20,
+    },
+    successContainer: {
+        alignItems: 'center',
+        paddingVertical: 10,
+    },
+    successIconContainer: {
+        marginBottom: 20,
+    },
+    successGradient: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    successTitle: {
+        fontSize: 22,
+        fontWeight: 'bold',
+        color: '#2D3436',
+        marginBottom: 12,
+    },
+    successDescription: {
+        fontSize: 15,
+        color: colors.textSecondary,
+        textAlign: 'center',
+        marginBottom: 24,
+        lineHeight: 22,
+    },
+    boldWhite: {
+        fontWeight: 'bold',
+        color: '#fff',
+    },
+    whiteButton: {
+        backgroundColor: '#fff',
+        padding: 16,
+        borderRadius: 15,
+        alignItems: 'center',
+        marginTop: 10,
+    },
+    whiteButtonText: {
+        color: '#8C6239',
+        fontSize: 16,
         fontWeight: 'bold',
     },
 });

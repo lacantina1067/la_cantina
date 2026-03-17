@@ -20,17 +20,17 @@ const FavoritesScreen = () => {
                 />
 
                 <View style={styles.productInfo}>
-                    <Text style={styles.productName} numberOfLines={1}>{item.name}</Text>
-                    <Text style={styles.productDescription} numberOfLines={2}>
-                        {item.description || 'Delicioso producto de la cantina'}
-                    </Text>
-                    <View style={styles.priceRow}>
-                        <Text style={styles.productPrice}>Bs.S {item.price.toFixed(2)}</Text>
+                    <View>
+                        <Text style={styles.productName} numberOfLines={1}>{item.name}</Text>
+                        <Text style={styles.productDescription} numberOfLines={2}>
+                            {item.description || 'Delicioso producto de la cantina'}
+                        </Text>
                         <View style={styles.stockBadge}>
                             <Ionicons name="cube-outline" size={12} color={colors.textSecondary} />
                             <Text style={styles.stockText}>{item.stock} disponibles</Text>
                         </View>
                     </View>
+                    <Text style={styles.productPrice}>Bs.S {item.price.toFixed(2)}</Text>
                 </View>
 
                 <View style={styles.actions}>
@@ -162,7 +162,7 @@ const styles = StyleSheet.create({
     },
     productImage: {
         width: 100,
-        height: 100,
+        height: '100%',
         backgroundColor: '#F0F0F0',
     },
     productInfo: {
@@ -179,17 +179,13 @@ const styles = StyleSheet.create({
     productDescription: {
         fontSize: 12,
         color: colors.textSecondary,
-        marginBottom: 8,
-    },
-    priceRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
+        marginBottom: 6,
     },
     productPrice: {
-        fontSize: 16,
+        fontSize: 18,
         fontWeight: 'bold',
         color: colors.secondary,
+        marginTop: 4,
     },
     stockBadge: {
         flexDirection: 'row',
@@ -199,6 +195,7 @@ const styles = StyleSheet.create({
         paddingVertical: 4,
         borderRadius: 8,
         gap: 4,
+        alignSelf: 'flex-start',
     },
     stockText: {
         fontSize: 10,
@@ -206,9 +203,11 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     actions: {
-        justifyContent: 'space-around',
+        width: 64,
+        justifyContent: 'center',
         alignItems: 'center',
-        paddingHorizontal: 12,
+        gap: 12,
+        paddingRight: 12,
         paddingVertical: 12,
     },
     removeButton: {
@@ -218,7 +217,6 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFE5E5',
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 8,
     },
     addButton: {
         borderRadius: 18,

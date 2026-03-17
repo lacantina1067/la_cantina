@@ -13,13 +13,15 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  -- Insertar el perfil del usuario
-  INSERT INTO public.profiles (id, email, nombre, rol)
+  -- Insertar el perfil del usuario con vínculos opcionales
+  INSERT INTO public.profiles (id, email, nombre, rol, parent_id, child_id)
   VALUES (
     new.id,
     new.email,
     COALESCE(new.raw_user_meta_data->>'nombre', 'Usuario Sin Nombre'),
-    COALESCE((new.raw_user_meta_data->>'rol')::app_role, 'estudiante'::app_role)
+    COALESCE((new.raw_user_meta_data->>'rol')::app_role, 'estudiante'::app_role),
+    (new.raw_user_meta_data->>'parent_id')::uuid,
+    (new.raw_user_meta_data->>'child_id')::uuid
   );
   
   -- Si el rol es estudiante, crear su billetera automáticamente
