@@ -1,8 +1,38 @@
+import { decode } from 'base64-arraybuffer';
+import * as FileSystem from 'expo-file-system';
 import { Product } from '../../domain/entities/Product';
 import { ProductRepository } from '../../domain/repositories/ProductRepository';
 import { supabase } from '../../lib/supabase';
 
 export class ProductRepositoryImpl implements ProductRepository {
+  private async uploadImage(fileUri: string): Promise<string> {
+    const base64 = await FileSystem.readAsStringAsync(fileUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    
+    const ext = fileUri.split('.').pop()?.toLowerCase();
+    const contentType = ext === 'png' ? 'image/png' : 'image/jpeg';
+    const filename = `${new Date().getTime()}.${ext || 'jpg'}`;
+    
+    const { error, data } = await supabase.storage
+      .from('imagenes_productos')
+      .upload(filename, decode(base64), { contentType });
+      
+    if (error) {
+      console.error('Error uploading image', error);
+      throw new Error(error.message);
+    }
+    
+    return data.path;
+  }
+
+  private getImageUrl(path: string | null): string {
+    if (!path) return 'https://via.placeholder.com/150';
+    if (path.startsWith('http')) return path;
+    const { data } = supabase.storage.from('imagenes_productos').getPublicUrl(path);
+    return data.publicUrl;
+  }
+
   async getProducts(): Promise<Product[]> {
     console.log('Getting products from Supabase');
 
@@ -24,7 +54,7 @@ export class ProductRepositoryImpl implements ProductRepository {
       price: product.precio,
       cost: 0, // No tenemos este campo en Supabase
       stock: product.stock || 0,
-      imageUrl: product.imagen_url,
+      imageUrl: this.getImageUrl(product.imagen_url),
     }));
   }
 
@@ -49,12 +79,17 @@ export class ProductRepositoryImpl implements ProductRepository {
       price: data.precio,
       cost: 0,
       stock: data.stock || 0,
-      imageUrl: data.imagen_url,
+      imageUrl: this.getImageUrl(data.imagen_url),
     };
   }
 
   async addProduct(product: Omit<Product, 'id'>): Promise<Product> {
     console.log('Adding product to Supabase:', product);
+
+    let imageUrl = product.imageUrl;
+    if (imageUrl && imageUrl.startsWith('file://')) {
+      imageUrl = await this.uploadImage(imageUrl);
+    }
 
     const { data, error } = await supabase
       .from('products')
@@ -63,7 +98,7 @@ export class ProductRepositoryImpl implements ProductRepository {
         descripcion: product.description,
         precio: product.price,
         stock: product.stock || 0,
-        imagen_url: product.imageUrl,
+        imagen_url: imageUrl,
         esta_activo: true,
       })
       .select()
@@ -81,12 +116,17 @@ export class ProductRepositoryImpl implements ProductRepository {
       price: data.precio,
       cost: 0,
       stock: data.stock || 0,
-      imageUrl: data.imagen_url,
+      imageUrl: this.getImageUrl(data.imagen_url),
     };
   }
 
   async updateProduct(product: Product): Promise<Product> {
     console.log('Updating product in Supabase:', product);
+
+    let imageUrl = product.imageUrl;
+    if (imageUrl && imageUrl.startsWith('file://')) {
+      imageUrl = await this.uploadImage(imageUrl);
+    }
 
     const { data, error } = await supabase
       .from('products')
@@ -95,7 +135,7 @@ export class ProductRepositoryImpl implements ProductRepository {
         descripcion: product.description,
         precio: product.price,
         stock: product.stock,
-        imagen_url: product.imageUrl,
+        imagen_url: imageUrl,
       })
       .eq('id', product.id)
       .select()
@@ -113,7 +153,7 @@ export class ProductRepositoryImpl implements ProductRepository {
       price: data.precio,
       cost: 0,
       stock: data.stock || 0,
-      imageUrl: data.imagen_url,
+      imageUrl: this.getImageUrl(data.imagen_url),
     };
   }
 

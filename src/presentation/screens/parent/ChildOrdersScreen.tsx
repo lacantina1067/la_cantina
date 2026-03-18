@@ -374,6 +374,7 @@ const ChildOrdersScreen = () => {
                   setShowPaymentModal(false);
                   setSelectedOrder(null);
                   setPaymentAmount('');
+                  Alert.alert('En desarrollo', 'El sistema de pagos estará disponible próximamente');
                   navigation.navigate('Recharge' as never);
                 }}
                 activeOpacity={0.8}

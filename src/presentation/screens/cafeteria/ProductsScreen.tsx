@@ -3,15 +3,15 @@ import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import {
-  FlatList,
-  Image,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    FlatList,
+    Image,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { ProductRepositoryImpl } from '../../../data/repositories/ProductRepositoryImpl';
 import { Product } from '../../../domain/entities/Product';
@@ -563,7 +563,7 @@ const styles = StyleSheet.create({
   },
   productImage: {
     width: 120,
-    height: '100%',
+    height: 120,
     backgroundColor: '#f0f0f0',
   },
   productContent: {

@@ -3,7 +3,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Audio } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, FlatList, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Animated, Dimensions, FlatList, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { ProductRepositoryImpl } from '../../../data/repositories/ProductRepositoryImpl';
 import { TokenRepositoryImpl } from '../../../data/repositories/TokenRepositoryImpl';
 import { Product } from '../../../domain/entities/Product';
@@ -12,6 +12,8 @@ import { useAuthStore } from '../../state/authStore';
 import { useCartStore } from '../../state/cartStore';
 import { useFavoritesStore } from '../../state/favoritesStore';
 import { colors } from '../../theme/colors';
+
+const { width } = Dimensions.get('window');
 
 const ProductCard = ({ item, onAdd, onToggleFavorite, isFavorite, isAdded }: { item: Product, onAdd: (p: Product) => void, onToggleFavorite: (p: Product) => void, isFavorite: boolean, isAdded: boolean }) => {
     const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -51,7 +53,11 @@ const ProductCard = ({ item, onAdd, onToggleFavorite, isFavorite, isAdded }: { i
     return (
         <View style={styles.cardContainer}>
             <View style={styles.cardImageContainer}>
-                <Image source={{ uri: item.imageUrl || 'https://via.placeholder.com/150' }} style={styles.cardImage} />
+                <Image 
+                    source={{ uri: item.imageUrl || 'https://via.placeholder.com/150' }} 
+                    style={styles.cardImage} 
+                    onError={(e) => console.log('Image load error:', e.nativeEvent.error)}
+                />
                 {item.stock === 0 && (
                     <View style={styles.outOfStockOverlay}>
                         <Text style={styles.outOfStockText}>Agotado</Text>
@@ -360,9 +366,9 @@ const styles = StyleSheet.create({
     emptyCategoryContainer: { alignItems: 'center', paddingVertical: 30, paddingHorizontal: 20 },
     emptyCategoryText: { fontSize: 14, color: colors.textSecondary, marginTop: 10 },
     horizontalListContent: { paddingHorizontal: 20, paddingBottom: 10 },
-    cardContainer: { width: 160, backgroundColor: '#fff', borderRadius: 16, marginRight: 15, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3, overflow: 'hidden' },
-    cardImageContainer: { height: 120, width: '100%', position: 'relative' },
-    cardImage: { width: '100%', height: '100%', resizeMode: 'cover' },
+    cardContainer: { width: width * 0.42, backgroundColor: '#fff', borderRadius: 16, marginRight: 15, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3, overflow: 'hidden' },
+    cardImageContainer: { height: 120, width: '100%', position: 'relative', backgroundColor: '#f0f0f0' },
+    cardImage: { ...StyleSheet.absoluteFillObject, width: undefined, height: undefined, resizeMode: 'cover' },
     outOfStockOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
     outOfStockText: { color: '#fff', fontWeight: 'bold', fontSize: 12 },
     favoriteButton: { position: 'absolute', top: 8, right: 8, backgroundColor: '#fff', width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },

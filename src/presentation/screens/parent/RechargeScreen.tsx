@@ -10,27 +10,30 @@ const RechargeScreen = () => {
   const { user } = useAuthStore();
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
+  const [balance, setBalance] = useState<number | null>(null);
+
+  React.useEffect(() => {
+    const fetchBalance = async () => {
+      if (user?.childId) {
+        try {
+          const repo = new TokenRepositoryImpl();
+          const currentBalance = await repo.getTokenBalance(user.childId);
+          setBalance(currentBalance);
+        } catch (error) {
+          console.error("Error fetching balance:", error);
+          setBalance(0);
+        }
+      } else {
+        // En caso de que no tenga un hijo asignado o no cargue, no se queda en null
+        setBalance(0);
+      }
+    };
+    fetchBalance();
+  }, [user]);
 
   const handleRecharge = async () => {
-    if (!user || !user.childId) return;
-    if (!amount || parseFloat(amount) <= 0) {
-      Alert.alert('Error', 'Por favor ingresa un monto válido');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const tokenRepository = new TokenRepositoryImpl();
-      await tokenRepository.rechargeTokens(user.childId, parseFloat(amount));
-      Alert.alert('¡Éxito!', `Se han recargado Bs.S ${amount} correctamente.`);
-      setAmount('');
-      Keyboard.dismiss();
-    } catch (error) {
-      console.error(error);
-      Alert.alert('Error', 'La recarga falló. Intenta de nuevo.');
-    } finally {
-      setLoading(false);
-    }
+    Alert.alert('En desarrollo', 'La funcionalidad de recarga estará disponible próximamente.');
+    // TODO: Implementar lógica real
   };
 
   const selectAmount = (value: string) => {
@@ -71,7 +74,9 @@ const RechargeScreen = () => {
                 <Ionicons name="wallet-outline" size={24} color={colors.textSecondary} />
                 <Text style={styles.balanceLabel}>Saldo Actual Estimado</Text>
               </View>
-              <Text style={styles.balanceAmount}>Bs.S 1,250.00</Text>
+              <Text style={styles.balanceAmount}>
+                {balance !== null ? `Bs.S ${balance.toFixed(2)}` : 'Cargando...'}
+              </Text>
               <Text style={styles.studentName}>Estudiante: {user?.firstName || 'Hijo'}</Text>
             </View>
 

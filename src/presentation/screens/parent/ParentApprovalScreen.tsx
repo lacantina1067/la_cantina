@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, StyleSheet, Text, View } from 'react-native';
 import { OrderRepositoryImpl } from '../../../data/repositories/OrderRepositoryImpl';
 import { Order } from '../../../domain/entities/Order';
 import { GetOrdersByStudentUseCase } from '../../../domain/usecases/GetOrdersByStudentUseCase';
@@ -33,6 +33,7 @@ const ParentApprovalScreen = () => {
   }, [user]);
 
   const handleApproval = (orderId: string, approve: boolean) => {
+    Alert.alert('En desarrollo', 'Esta función de aprobación/rechazo estará disponible próximamente.');
     console.log(`Order ${orderId} ${approve ? 'approved' : 'rejected'}`);
   };
 
