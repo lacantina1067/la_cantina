@@ -1,9 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import { Alert, FlatList, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { OrderRepositoryImpl } from '../../../data/repositories/OrderRepositoryImpl';
+import { supabase } from '../../../lib/supabase';
 import { Order } from '../../../domain/entities/Order';
 import { GetOrdersByStudentUseCase } from '../../../domain/usecases/GetOrdersByStudentUseCase';
 import { useAuthStore } from '../../state/authStore';
@@ -11,7 +11,6 @@ import { colors } from '../../theme/colors';
 
 const ChildOrdersScreen = () => {
   const { user } = useAuthStore();
-  const navigation = useNavigation();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -19,7 +18,8 @@ const ChildOrdersScreen = () => {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [rejectionNote, setRejectionNote] = useState('');
-  const [paymentAmount, setPaymentAmount] = useState('');
+  const [childBalance, setChildBalance] = useState<number>(0);
+  const [paymentLoading, setPaymentLoading] = useState(false);
 
   const fetchOrders = async () => {
     if (!user || !user.childId) {
@@ -44,18 +44,19 @@ const ChildOrdersScreen = () => {
 
   const handleApproval = async (orderId: string, approve: boolean) => {
     if (approve) {
+      const order = orders.find(o => o.id === orderId);
+      setSelectedOrder(order || null);
       try {
-        const orderRepository = new OrderRepositoryImpl();
-        await orderRepository.updateOrderStatus(orderId, 'pending_payment');
-        const order = orders.find(o => o.id === orderId);
-        setOrders(prev => prev.filter(o => o.id !== orderId));
-        setSelectedOrder(order || null);
-        setPaymentAmount(order?.total.toFixed(2) || '');
-        setShowPaymentModal(true);
-      } catch (error) {
-        console.error('Error approving order:', error);
-        Alert.alert('Error', 'No se pudo aprobar la orden. Intenta nuevamente.');
+        const { data } = await supabase
+          .from('wallets')
+          .select('saldo')
+          .eq('user_id', user?.childId)
+          .single();
+        setChildBalance(data?.saldo || 0);
+      } catch {
+        setChildBalance(0);
       }
+      setShowPaymentModal(true);
     } else {
       const order = orders.find(o => o.id === orderId);
       setSelectedOrder(order || null);
@@ -89,6 +90,27 @@ const ChildOrdersScreen = () => {
     } catch (error) {
       console.error('Error rejecting order:', error);
       Alert.alert('Error', 'No se pudo rechazar la orden. Intenta nuevamente.');
+    }
+  };
+
+  const handleConfirmPayment = async () => {
+    if (!selectedOrder) return;
+    setPaymentLoading(true);
+    try {
+      const { error } = await supabase.rpc('approve_order_and_deduct', { order_id: selectedOrder.id });
+      if (error) throw error;
+      setOrders(prev => prev.filter(o => o.id !== selectedOrder.id));
+      setShowPaymentModal(false);
+      setSelectedOrder(null);
+      Alert.alert(
+        '¡Pago Exitoso!',
+        `Se descontaron Bs.S ${selectedOrder.total.toFixed(2)} del saldo de ${selectedOrder.student.firstName}.`,
+        [{ text: 'Entendido' }]
+      );
+    } catch (error: any) {
+      Alert.alert('Error al pagar', error.message || 'No se pudo completar el pago. Verifica el saldo disponible.');
+    } finally {
+      setPaymentLoading(false);
     }
   };
 
@@ -348,10 +370,17 @@ const ChildOrdersScreen = () => {
               </View>
             )}
 
-            <View style={styles.paymentInfoBox}>
-              <Ionicons name="information-circle-outline" size={20} color="#3498DB" />
-              <Text style={styles.paymentInfoText}>
-                El estudiante necesita tener saldo suficiente para completar el pago
+            <View style={[styles.paymentInfoBox, selectedOrder && childBalance < selectedOrder.total && { backgroundColor: '#FDEDEC', borderColor: '#FADBD8' }]}>
+              <Ionicons
+                name={selectedOrder && childBalance >= selectedOrder.total ? 'checkmark-circle-outline' : 'warning-outline'}
+                size={20}
+                color={selectedOrder && childBalance >= selectedOrder.total ? '#27AE60' : '#E74C3C'}
+              />
+              <Text style={[styles.paymentInfoText, selectedOrder && childBalance < selectedOrder.total && { color: '#C0392B' }]}>
+                Saldo disponible: Bs.S {childBalance.toFixed(2)}
+                {selectedOrder && childBalance < selectedOrder.total
+                  ? `\nSaldo insuficiente. Faltan Bs.S ${(selectedOrder.total - childBalance).toFixed(2)}`
+                  : '\nSaldo suficiente para completar el pago'}
               </Text>
             </View>
 
@@ -361,22 +390,16 @@ const ChildOrdersScreen = () => {
                 onPress={() => {
                   setShowPaymentModal(false);
                   setSelectedOrder(null);
-                  setPaymentAmount('');
                 }}
                 activeOpacity={0.7}
               >
-                <Text style={styles.paymentLaterText}>Pagar Después</Text>
+                <Text style={styles.paymentLaterText}>Cancelar</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.paymentNowButton}
-                onPress={() => {
-                  setShowPaymentModal(false);
-                  setSelectedOrder(null);
-                  setPaymentAmount('');
-                  Alert.alert('En desarrollo', 'El sistema de pagos estará disponible próximamente');
-                  navigation.navigate('Recharge' as never);
-                }}
+                style={[styles.paymentNowButton, (paymentLoading || (selectedOrder != null && childBalance < selectedOrder.total)) && { opacity: 0.6 }]}
+                onPress={handleConfirmPayment}
+                disabled={paymentLoading || (selectedOrder != null && childBalance < selectedOrder.total)}
                 activeOpacity={0.8}
               >
                 <LinearGradient
@@ -385,8 +408,8 @@ const ChildOrdersScreen = () => {
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                 >
-                  <Ionicons name="wallet-outline" size={20} color="#fff" />
-                  <Text style={styles.paymentNowText}>Ir a Recargar</Text>
+                  <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
+                  <Text style={styles.paymentNowText}>{paymentLoading ? 'Procesando...' : 'Confirmar Pago'}</Text>
                 </LinearGradient>
               </TouchableOpacity>
             </View>

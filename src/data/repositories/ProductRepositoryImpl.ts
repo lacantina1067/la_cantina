@@ -1,5 +1,5 @@
 import { decode } from 'base64-arraybuffer';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Product } from '../../domain/entities/Product';
 import { ProductRepository } from '../../domain/repositories/ProductRepository';
 import { supabase } from '../../lib/supabase';
@@ -7,7 +7,7 @@ import { supabase } from '../../lib/supabase';
 export class ProductRepositoryImpl implements ProductRepository {
   private async uploadImage(fileUri: string): Promise<string> {
     const base64 = await FileSystem.readAsStringAsync(fileUri, {
-      encoding: FileSystem.EncodingType.Base64,
+      encoding: 'base64' as any,
     });
     
     const ext = fileUri.split('.').pop()?.toLowerCase();

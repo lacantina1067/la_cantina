@@ -8,8 +8,21 @@ import { OrderRepositoryImpl } from '../../../data/repositories/OrderRepositoryI
 import { Order, OrderStatus } from '../../../domain/entities/Order';
 import { GetOrdersByCafeteriaUseCase } from '../../../domain/usecases/GetOrdersByCafeteriaUseCase';
 import { UpdateOrderStatusUseCase } from '../../../domain/usecases/UpdateOrderStatusUseCase';
+import { supabase } from '../../../lib/supabase';
 
-type TabType = 'pending' | 'approved' | 'history';
+type TabType = 'pending' | 'approved' | 'history' | 'recargas';
+
+interface RechargeRequest {
+  id: string;
+  student_nombre: string;
+  monto: number;
+  referencia: string;
+  telefono_origen: string;
+  cedula_tipo: string;
+  cedula_numero: string;
+  estado: string;
+  created_at: string;
+}
 
 const AdminPanelScreen = () => {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -19,6 +32,8 @@ const AdminPanelScreen = () => {
   const [activeTab, setActiveTab] = useState<TabType>('approved');
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
+  const [rechargeRequests, setRechargeRequests] = useState<RechargeRequest[]>([]);
+  const [rechargeLoading, setRechargeLoading] = useState(false);
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -34,13 +49,58 @@ const AdminPanelScreen = () => {
     }
   }, []);
 
+  const fetchRechargeRequests = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('recharge_requests')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (!error && data) setRechargeRequests(data as RechargeRequest[]);
+    } catch (error) {
+      console.error(error);
+    }
+  }, []);
+
   useEffect(() => {
     fetchOrders();
-  }, [fetchOrders]);
+    fetchRechargeRequests();
+  }, [fetchOrders, fetchRechargeRequests]);
 
   const onRefresh = () => {
     setRefreshing(true);
     fetchOrders();
+    fetchRechargeRequests();
+  };
+
+  const handleApproveRecharge = async (id: string) => {
+    setRechargeLoading(true);
+    try {
+      const { error } = await supabase.rpc('approve_recharge', { request_id: id });
+      if (error) throw error;
+      Alert.alert('¡Aprobado!', 'La recarga fue aprobada y el saldo acreditado.');
+      fetchRechargeRequests();
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'No se pudo aprobar la recarga.');
+    } finally {
+      setRechargeLoading(false);
+    }
+  };
+
+  const handleRejectRecharge = async (id: string) => {
+    setRechargeLoading(true);
+    try {
+      const { error } = await supabase
+        .from('recharge_requests')
+        .update({ estado: 'rechazado' })
+        .eq('id', id);
+      if (error) throw error;
+      Alert.alert('Rechazado', 'La solicitud fue rechazada.');
+      fetchRechargeRequests();
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'No se pudo rechazar la solicitud.');
+    } finally {
+      setRechargeLoading(false);
+    }
   };
 
   const handleAction = async (orderId: string, action: 'deliver' | 'cancel') => {
@@ -238,6 +298,21 @@ const AdminPanelScreen = () => {
           >
             <Text style={[styles.tabText, activeTab === 'history' && styles.activeTabText]}>Lista</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabItem, activeTab === 'recargas' && styles.activeTabItem]}
+            onPress={() => setActiveTab('recargas')}
+          >
+            <View>
+              <Text style={[styles.tabText, activeTab === 'recargas' && styles.activeTabText]}>Recargas</Text>
+              {rechargeRequests.filter(r => r.estado === 'pendiente').length > 0 && (
+                <View style={styles.tabBadge}>
+                  <Text style={styles.tabBadgeText}>
+                    {rechargeRequests.filter(r => r.estado === 'pendiente').length}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </TouchableOpacity>
         </View>
       </LinearGradient>
 
@@ -245,6 +320,62 @@ const AdminPanelScreen = () => {
         <View style={styles.centered}>
           <Text>Cargando pedidos...</Text>
         </View>
+      ) : activeTab === 'recargas' ? (
+        <FlatList
+          data={rechargeRequests}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContainer}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
+          }
+          renderItem={({ item }) => {
+            const isPending = item.estado === 'pendiente';
+            const badgeColor = item.estado === 'aprobado' ? '#2ECC71' : item.estado === 'rechazado' ? '#E74C3C' : '#F39C12';
+            return (
+              <View style={styles.rechargeCard}>
+                <View style={styles.rechargeCardHeader}>
+                  <Text style={styles.rechargeStudentName}>{item.student_nombre}</Text>
+                  <Text style={styles.rechargeMonto}>Bs.S {item.monto.toFixed(2)}</Text>
+                </View>
+                <Text style={styles.rechargeDetail}>Ref: {item.referencia}</Text>
+                <Text style={styles.rechargeDetail}>Telf: {item.telefono_origen}</Text>
+                <Text style={styles.rechargeDetail}>Cédula: {item.cedula_tipo}-{item.cedula_numero}</Text>
+                {!isPending && (
+                  <View style={[styles.rechargeStateBadge, { backgroundColor: badgeColor + '20', marginTop: 8 }]}>
+                    <Text style={[styles.rechargeStateBadgeText, { color: badgeColor }]}>
+                      {item.estado.charAt(0).toUpperCase() + item.estado.slice(1)}
+                    </Text>
+                  </View>
+                )}
+                {isPending && (
+                  <View style={styles.rechargeActions}>
+                    <TouchableOpacity
+                      style={styles.rechargeRejectBtn}
+                      onPress={() => handleRejectRecharge(item.id)}
+                      disabled={rechargeLoading}
+                    >
+                      <Text style={styles.rechargeRejectText}>Rechazar</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.rechargeApproveBtn}
+                      onPress={() => handleApproveRecharge(item.id)}
+                      disabled={rechargeLoading}
+                    >
+                      <Text style={styles.rechargeApproveText}>Aprobar</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            );
+          }}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Ionicons name="wallet-outline" size={60} color="#ccc" />
+              <Text style={styles.emptyText}>No hay solicitudes de recarga</Text>
+            </View>
+          }
+        />
       ) : (
         <FlatList
           data={filteredOrders}
@@ -674,6 +805,69 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 16,
   },
+  tabBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -10,
+    backgroundColor: '#E74C3C',
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 3,
+  },
+  tabBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  rechargeCard: {
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    marginBottom: 14,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  rechargeCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  rechargeStudentName: { fontSize: 16, fontWeight: 'bold', color: colors.text },
+  rechargeMonto: { fontSize: 18, fontWeight: 'bold', color: colors.primary },
+  rechargeDetail: { fontSize: 13, color: colors.textSecondary, marginBottom: 2 },
+  rechargeActions: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  rechargeRejectBtn: {
+    flex: 1,
+    height: 40,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E74C3C',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  rechargeRejectText: { color: '#E74C3C', fontWeight: 'bold' },
+  rechargeApproveBtn: {
+    flex: 1,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#2ECC71',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  rechargeApproveText: { color: '#fff', fontWeight: 'bold' },
+  rechargeStateBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  rechargeStateBadgeText: { fontSize: 12, fontWeight: 'bold' },
 });
 
 export default AdminPanelScreen;
