@@ -1,33 +1,76 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useState } from 'react';
-import { FlatList, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Order, useOrdersStore } from '../../state/ordersStore';
+import React, { useCallback, useEffect, useState } from 'react';
+import { FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { OrderRepositoryImpl } from '../../../data/repositories/OrderRepositoryImpl';
+import { Order } from '../../../domain/entities/Order';
+import { GetOrdersByStudentUseCase } from '../../../domain/usecases/GetOrdersByStudentUseCase';
+import { useAuthStore } from '../../state/authStore';
 import { colors } from '../../theme/colors';
 
+const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
+    pending_approval:        { label: 'Pendiente',  color: '#F39C12', icon: 'time-outline' },
+    approved:                { label: 'Aprobado',   color: '#2ECC71', icon: 'checkmark-circle-outline' },
+    rejected_by_parent:      { label: 'Rechazado',  color: '#E74C3C', icon: 'close-circle-outline' },
+    completed:               { label: 'Entregado',  color: '#3498DB', icon: 'bag-check-outline' },
+    cancelled_by_cafeteria:  { label: 'Cancelado',  color: '#95A5A6', icon: 'ban-outline' },
+};
+
+const getStatus = (status: string) =>
+    STATUS_CONFIG[status] ?? { label: 'Pendiente', color: '#F39C12', icon: 'time-outline' };
+
+const FILTERS = [
+    { key: 'all',                   label: 'Todos',      icon: 'apps' },
+    { key: 'pending_approval',      label: 'Pendientes', icon: 'time' },
+    { key: 'approved',              label: 'Aprobados',  icon: 'checkmark-circle' },
+    { key: 'completed',             label: 'Entregados', icon: 'bag-check' },
+    { key: 'rejected_by_parent',    label: 'Rechazados', icon: 'close-circle' },
+];
+
 const OrdersScreen = () => {
-    const { orders } = useOrdersStore();
+    const { user } = useAuthStore();
+    const [orders, setOrders] = useState<Order[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
     const [selectedFilter, setSelectedFilter] = useState<string>('all');
 
-    const filteredOrders = orders.filter(order => {
-        if (selectedFilter === 'all') return true;
-        return order.status === selectedFilter;
-    });
+    const fetchOrders = useCallback(async () => {
+        if (!user) { setLoading(false); return; }
+        try {
+            const repo = new OrderRepositoryImpl();
+            const useCase = new GetOrdersByStudentUseCase(repo);
+            const result = await useCase.execute(user.id);
+            setOrders(result.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()));
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    }, [user]);
+
+    useEffect(() => { fetchOrders(); }, [fetchOrders]);
+
+    const onRefresh = () => { setRefreshing(true); fetchOrders(); };
+
+    const filteredOrders = selectedFilter === 'all'
+        ? orders
+        : orders.filter(o => o.status === selectedFilter);
 
     const renderOrderItem = ({ item }: { item: Order }) => {
+        const s = getStatus(item.status);
         return (
             <View style={styles.orderCard}>
                 <View style={styles.orderHeader}>
                     <View>
-                        <Text style={styles.orderDate}>{item.date}</Text>
-                        <Text style={styles.orderId}>Pedido #{item.id.slice(-6)}</Text>
-                    </View>
-                    <View style={[styles.statusBadge, {
-                        backgroundColor: item.status === 'approved' ? '#2ECC71' : item.status === 'rejected_by_parent' ? '#E74C3C' : '#F39C12'
-                    }]}>
-                        <Text style={styles.statusText}>
-                            {item.status === 'approved' ? 'Aprobado' : item.status === 'rejected_by_parent' ? 'Rechazado' : 'Pendiente'}
+                        <Text style={styles.orderDate}>
+                            {item.createdAt.toLocaleDateString('es-VE')} {item.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </Text>
+                        <Text style={styles.orderId}>Pedido #{item.id.slice(-6).toUpperCase()}</Text>
+                    </View>
+                    <View style={[styles.statusBadge, { backgroundColor: s.color + '20', borderColor: s.color }]}>
+                        <Ionicons name={s.icon as any} size={13} color={s.color} />
+                        <Text style={[styles.statusText, { color: s.color }]}>{s.label}</Text>
                     </View>
                 </View>
 
@@ -41,13 +84,13 @@ const OrdersScreen = () => {
                     ))}
                 </View>
 
-                {item.status === 'rejected_by_parent' && item.rejectionNote && (
+                {item.status === 'rejected_by_parent' && (item as any).rejectionNote && (
                     <View style={styles.rejectionNoteContainer}>
                         <View style={styles.rejectionHeader}>
                             <Ionicons name="alert-circle" size={18} color="#E74C3C" />
                             <Text style={styles.rejectionTitle}>Motivo del rechazo:</Text>
                         </View>
-                        <Text style={styles.rejectionNote}>{item.rejectionNote}</Text>
+                        <Text style={styles.rejectionNote}>{(item as any).rejectionNote}</Text>
                     </View>
                 )}
 
@@ -69,49 +112,31 @@ const OrdersScreen = () => {
             >
                 <View style={StyleSheet.absoluteFill}>
                     <Ionicons name="receipt" size={80} color="rgba(255,255,255,0.1)" style={{ position: 'absolute', right: -20, top: -10 }} />
-                    <Ionicons name="checkmark-circle" size={60} color="rgba(255,255,255,0.08)" style={{ position: 'absolute', left: -10, bottom: -10 }} />
                 </View>
-
                 <View style={styles.headerContent}>
                     <Text style={styles.headerTitle}>Mis Pedidos</Text>
                     <Text style={styles.headerSubtitle}>Historial de compras</Text>
                 </View>
             </LinearGradient>
 
-            {orders.length > 0 && (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filtersContainer}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filtersContainer} contentContainerStyle={{ paddingHorizontal: 20 }}>
+                {FILTERS.map(f => (
                     <TouchableOpacity
-                        style={[styles.filterChip, selectedFilter === 'all' && styles.filterChipActive]}
-                        onPress={() => setSelectedFilter('all')}
+                        key={f.key}
+                        style={[styles.filterChip, selectedFilter === f.key && styles.filterChipActive]}
+                        onPress={() => setSelectedFilter(f.key)}
                     >
-                        <Ionicons name="apps" size={16} color={selectedFilter === 'all' ? '#fff' : colors.textSecondary} />
-                        <Text style={[styles.filterChipText, selectedFilter === 'all' && styles.filterChipTextActive]}>Todos</Text>
+                        <Ionicons name={f.icon as any} size={16} color={selectedFilter === f.key ? '#fff' : colors.textSecondary} />
+                        <Text style={[styles.filterChipText, selectedFilter === f.key && styles.filterChipTextActive]}>{f.label}</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.filterChip, selectedFilter === 'pending_approval' && styles.filterChipActive]}
-                        onPress={() => setSelectedFilter('pending_approval')}
-                    >
-                        <Ionicons name="time" size={16} color={selectedFilter === 'pending_approval' ? '#fff' : colors.textSecondary} />
-                        <Text style={[styles.filterChipText, selectedFilter === 'pending_approval' && styles.filterChipTextActive]}>Pendientes</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.filterChip, selectedFilter === 'approved' && styles.filterChipActive]}
-                        onPress={() => setSelectedFilter('approved')}
-                    >
-                        <Ionicons name="checkmark-circle" size={16} color={selectedFilter === 'approved' ? '#fff' : colors.textSecondary} />
-                        <Text style={[styles.filterChipText, selectedFilter === 'approved' && styles.filterChipTextActive]}>Aprobados</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.filterChip, selectedFilter === 'rejected_by_parent' && styles.filterChipActive]}
-                        onPress={() => setSelectedFilter('rejected_by_parent')}
-                    >
-                        <Ionicons name="close-circle" size={16} color={selectedFilter === 'rejected_by_parent' ? '#fff' : colors.textSecondary} />
-                        <Text style={[styles.filterChipText, selectedFilter === 'rejected_by_parent' && styles.filterChipTextActive]}>Rechazados</Text>
-                    </TouchableOpacity>
-                </ScrollView>
-            )}
+                ))}
+            </ScrollView>
 
-            {filteredOrders.length === 0 ? (
+            {loading ? (
+                <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>Cargando pedidos...</Text>
+                </View>
+            ) : filteredOrders.length === 0 ? (
                 <View style={styles.emptyContainer}>
                     <Ionicons name="receipt-outline" size={80} color="#DFE6E9" />
                     <Text style={styles.emptyTitle}>
@@ -130,6 +155,9 @@ const OrdersScreen = () => {
                     keyExtractor={(item) => item.id}
                     contentContainerStyle={styles.listContainer}
                     showsVerticalScrollIndicator={false}
+                    refreshControl={
+                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
+                    }
                 />
             )}
         </View>
@@ -144,23 +172,29 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         borderBottomLeftRadius: 30,
         borderBottomRightRadius: 30,
+        overflow: 'hidden',
     },
     headerContent: { zIndex: 1 },
     headerTitle: { fontSize: 28, fontWeight: 'bold', color: '#fff', marginBottom: 6 },
     headerSubtitle: { fontSize: 14, color: 'rgba(255,255,255,0.9)' },
-    emptyContainer: {
-        flex: 1,
-        justifyContent: 'center',
+    filtersContainer: { marginTop: 12, marginBottom: 4 },
+    filterChip: {
+        flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 40,
+        paddingHorizontal: 14,
+        paddingVertical: 9,
+        borderRadius: 20,
+        backgroundColor: '#fff',
+        marginRight: 10,
+        borderWidth: 1,
+        borderColor: '#E8E8E8',
+        gap: 6,
     },
-    emptyTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: colors.text,
-        marginTop: 20,
-        marginBottom: 8,
-    },
+    filterChipActive: { backgroundColor: colors.secondary, borderColor: colors.secondary },
+    filterChipText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
+    filterChipTextActive: { color: '#fff', fontWeight: 'bold' },
+    emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 },
+    emptyTitle: { fontSize: 20, fontWeight: 'bold', color: colors.text, marginTop: 20, marginBottom: 8 },
     emptyText: { fontSize: 14, color: colors.textSecondary, textAlign: 'center' },
     listContainer: { padding: 20 },
     orderCard: {
@@ -185,14 +219,22 @@ const styles = StyleSheet.create({
     },
     orderDate: { fontSize: 12, color: colors.textSecondary, marginBottom: 4 },
     orderId: { fontSize: 16, fontWeight: 'bold', color: colors.text },
-    statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
-    statusText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
+    statusBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 12,
+        borderWidth: 1,
+    },
+    statusText: { fontSize: 12, fontWeight: 'bold' },
     orderItems: { marginBottom: 12 },
     productRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingVertical: 8,
+        paddingVertical: 6,
     },
     productName: { flex: 1, fontSize: 14, color: colors.text },
     productQuantity: { fontSize: 14, color: colors.textSecondary, marginHorizontal: 12 },
@@ -205,22 +247,9 @@ const styles = StyleSheet.create({
         borderLeftWidth: 4,
         borderLeftColor: '#E74C3C',
     },
-    rejectionHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: 8,
-    },
-    rejectionTitle: {
-        fontSize: 13,
-        fontWeight: 'bold',
-        color: '#E74C3C',
-    },
-    rejectionNote: {
-        fontSize: 14,
-        color: '#C62828',
-        lineHeight: 20,
-    },
+    rejectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+    rejectionTitle: { fontSize: 13, fontWeight: 'bold', color: '#E74C3C' },
+    rejectionNote: { fontSize: 14, color: '#C62828', lineHeight: 20 },
     orderFooter: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -231,11 +260,6 @@ const styles = StyleSheet.create({
     },
     totalLabel: { fontSize: 16, fontWeight: 'bold', color: colors.text },
     totalAmount: { fontSize: 18, fontWeight: 'bold', color: colors.secondary },
-    filtersContainer: { paddingHorizontal: 20, marginTop: 12, marginBottom: 10 },
-    filterChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, backgroundColor: '#fff', marginRight: 10, borderWidth: 1, borderColor: '#E8E8E8', gap: 6 },
-    filterChipActive: { backgroundColor: colors.secondary, borderColor: colors.secondary },
-    filterChipText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
-    filterChipTextActive: { color: '#fff', fontWeight: 'bold' },
 });
 
 export default OrdersScreen;
