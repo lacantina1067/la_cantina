@@ -3,7 +3,6 @@ import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
   FlatList,
   Image,
   Modal,
@@ -20,6 +19,8 @@ import { AddProductUseCase } from '../../../domain/usecases/AddProductUseCase';
 import { DeleteProductUseCase } from '../../../domain/usecases/DeleteProductUseCase';
 import { GetProductsUseCase } from '../../../domain/usecases/GetProductsUseCase';
 import { UpdateProductUseCase } from '../../../domain/usecases/UpdateProductUseCase';
+import { hasBadWords } from '../../../utils/validation';
+import Input from '../../components/Input';
 import { colors } from '../../theme/colors';
 
 const ProductsScreen = () => {
@@ -27,10 +28,31 @@ const ProductsScreen = () => {
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
 
   // Search and Filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'low-stock' | 'out-of-stock'>('all');
+  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const renderToast = () => {
+    if (!toast) return null;
+    return (
+      <View style={[styles.toastContainer, toast.type === 'error' ? styles.toastError : styles.toastSuccess]}>
+        <Ionicons
+          name={toast.type === 'success' ? 'checkmark-circle' : 'alert-circle'}
+          size={24}
+          color={colors.white}
+        />
+        <Text style={styles.toastText}>{toast.message}</Text>
+      </View>
+    );
+  };
 
   // Form state
   const [name, setName] = useState('');
@@ -49,7 +71,7 @@ const ProductsScreen = () => {
       setProducts(result);
     } catch (error) {
       console.error(error);
-      Alert.alert('Error', 'No se pudieron cargar los productos');
+      showToast('No se pudieron cargar los productos', 'error');
     } finally {
       setLoading(false);
     }
@@ -97,7 +119,45 @@ const ProductsScreen = () => {
 
   const handleSave = async () => {
     if (!name || !price || !stock) {
-      Alert.alert('Error', 'Por favor completa los campos obligatorios');
+      showToast('Por favor completa los campos obligatorios (*)', 'error');
+      return;
+    }
+
+    if (name.length < 3) {
+      showToast('El nombre del producto debe tener al menos 3 caracteres', 'error');
+      return;
+    }
+
+    if (name.length > 50) {
+      showToast('El nombre del producto no puede exceder 50 caracteres', 'error');
+      return;
+    }
+
+    if (hasBadWords(name)) {
+      showToast('El nombre contiene palabras no permitidas', 'error');
+      return;
+    }
+
+    if (description && description.length > 200) {
+      showToast('La descripción es muy larga (máx. 200 caracteres)', 'error');
+      return;
+    }
+
+    if (description && hasBadWords(description)) {
+      showToast('La descripción contiene palabras no permitidas', 'error');
+      return;
+    }
+
+    const priceNum = parseFloat(price);
+    const stockNum = parseInt(stock);
+
+    if (isNaN(priceNum) || priceNum <= 0) {
+      showToast('El precio debe ser mayor a 0', 'error');
+      return;
+    }
+
+    if (isNaN(stockNum) || stockNum < 0) {
+      showToast('El stock no puede ser negativo', 'error');
       return;
     }
 
@@ -112,7 +172,7 @@ const ProductsScreen = () => {
           stock: parseInt(stock),
           imageUrl,
         });
-        Alert.alert('Éxito', 'Producto actualizado correctamente');
+        showToast('Producto actualizado correctamente');
       } else {
         const addProductUseCase = new AddProductUseCase(productRepository);
         await addProductUseCase.execute({
@@ -123,38 +183,29 @@ const ProductsScreen = () => {
           imageUrl,
           cost: 0, // Default cost
         });
-        Alert.alert('Éxito', 'Producto creado correctamente');
+        showToast('¡Producto creado exitosamente!');
       }
       setModalVisible(false);
       fetchProducts();
     } catch (error) {
       console.error(error);
-      Alert.alert('Error', 'No se pudo guardar el producto');
+      showToast('No se pudo guardar el producto', 'error');
     }
   };
 
-  const handleDelete = (id: string) => {
-    Alert.alert(
-      'Eliminar Producto',
-      '¿Estás seguro de que quieres eliminar este producto?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const deleteProductUseCase = new DeleteProductUseCase(productRepository);
-              await deleteProductUseCase.execute(id);
-              fetchProducts();
-            } catch (error) {
-              console.error(error);
-              Alert.alert('Error', 'No se pudo eliminar el producto');
-            }
-          },
-        },
-      ]
-    );
+  const handleDelete = async () => {
+    if (!showDeleteConfirm) return;
+
+    try {
+      const deleteProductUseCase = new DeleteProductUseCase(productRepository);
+      await deleteProductUseCase.execute(showDeleteConfirm);
+      setShowDeleteConfirm(null);
+      showToast('Producto eliminado correctamente');
+      fetchProducts();
+    } catch (error) {
+      console.error(error);
+      showToast('No se pudo eliminar el producto', 'error');
+    }
   };
 
   const filteredProducts = products.filter(product => {
@@ -195,7 +246,7 @@ const ProductsScreen = () => {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionButton, styles.deleteButton]}
-              onPress={() => handleDelete(item.id)}
+              onPress={() => setShowDeleteConfirm(item.id)}
             >
               <Ionicons name="trash-outline" size={20} color={colors.white} />
             </TouchableOpacity>
@@ -213,7 +264,6 @@ const ProductsScreen = () => {
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       >
-        {/* Iconos decorativos de fondo */}
         <View style={StyleSheet.absoluteFill}>
           <Ionicons name="pizza" size={80} color="rgba(255,255,255,0.1)" style={{ position: 'absolute', right: -20, top: -10 }} />
           <Ionicons name="fast-food" size={60} color="rgba(255,255,255,0.08)" style={{ position: 'absolute', left: -10, bottom: -10 }} />
@@ -223,7 +273,6 @@ const ProductsScreen = () => {
         <Text style={styles.headerTitle}>Gestión de Productos</Text>
         <Text style={styles.headerSubtitle}>Administra el menú de la cantina</Text>
 
-        {/* Barra de Búsqueda */}
         <View style={styles.searchContainer}>
           <Ionicons name="search" size={20} color={colors.textSecondary} style={styles.searchIcon} />
           <TextInput
@@ -240,7 +289,6 @@ const ProductsScreen = () => {
           )}
         </View>
 
-        {/* Filtros */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filtersContainer}>
           <TouchableOpacity
             style={[styles.filterChip, selectedFilter === 'all' && styles.filterChipActive]}
@@ -296,6 +344,8 @@ const ProductsScreen = () => {
         </LinearGradient>
       </TouchableOpacity>
 
+      {renderToast()}
+
       <Modal
         animationType="slide"
         transparent={true}
@@ -325,43 +375,44 @@ const ProductsScreen = () => {
                 )}
               </TouchableOpacity>
 
-              <Text style={styles.label}>Nombre del Producto *</Text>
-              <TextInput
-                style={styles.input}
+              <Input
+                label="Nombre del Producto *"
                 value={name}
                 onChangeText={setName}
                 placeholder="Ej. Empanada de Queso"
+                icon="fast-food-outline"
               />
 
-              <Text style={styles.label}>Descripción</Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
+              <Input
+                label="Descripción"
                 value={description}
                 onChangeText={setDescription}
                 placeholder="Descripción detallada..."
                 multiline
                 numberOfLines={3}
+                icon="document-text-outline"
+                containerStyle={{ height: 120 }}
               />
 
               <View style={styles.row}>
                 <View style={styles.halfColumn}>
-                  <Text style={styles.label}>Precio (Bs.S) *</Text>
-                  <TextInput
-                    style={styles.input}
+                  <Input
+                    label="Precio (Bs.S) *"
                     value={price}
                     onChangeText={setPrice}
                     placeholder="0.00"
                     keyboardType="numeric"
+                    icon="cash-outline"
                   />
                 </View>
                 <View style={styles.halfColumn}>
-                  <Text style={styles.label}>Stock Inicial *</Text>
-                  <TextInput
-                    style={styles.input}
+                  <Input
+                    label="Stock Inicial *"
                     value={stock}
                     onChangeText={setStock}
                     placeholder="0"
                     keyboardType="numeric"
+                    icon="cube-outline"
                   />
                 </View>
               </View>
@@ -382,9 +433,44 @@ const ProductsScreen = () => {
               </TouchableOpacity>
             </View>
           </View>
+          {renderToast()}
         </View>
       </Modal>
-    </View>
+
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={!!showDeleteConfirm}
+        onRequestClose={() => setShowDeleteConfirm(null)}
+      >
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmCard}>
+            <View style={styles.confirmIconContainer}>
+              <Ionicons name="trash" size={32} color="#E74C3C" />
+            </View>
+            <Text style={styles.confirmTitle}>¿Eliminar Producto?</Text>
+            <Text style={styles.confirmSubtitle}>
+              Esta acción no se puede deshacer. El producto se borrará permanentemente de tu menú.
+            </Text>
+            <View style={styles.confirmFooter}>
+              <TouchableOpacity
+                style={[styles.confirmButton, styles.confirmCancelBtn]}
+                onPress={() => setShowDeleteConfirm(null)}
+              >
+                <Text style={styles.confirmCancelText}>No, mantener</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.confirmButton, styles.confirmDeleteBtn]}
+                onPress={handleDelete}
+              >
+                <Text style={styles.confirmDeleteText}>Sí, eliminar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          {renderToast()}
+        </View>
+      </Modal>
+    </View >
   );
 };
 
@@ -489,6 +575,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+    gap: 10,
   },
   productName: {
     fontSize: 16,
@@ -512,6 +599,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 8,
+    gap: 12,
   },
   stockBadge: {
     flexDirection: 'row',
@@ -570,7 +658,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 16,
   },
-  // Modal Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -622,25 +709,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 14,
   },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: '#f5f6fa',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  textArea: {
-    height: 80,
-    textAlignVertical: 'top',
-  },
   row: {
     flexDirection: 'row',
     gap: 16,
@@ -675,6 +743,101 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  toastContainer: {
+    position: 'absolute',
+    bottom: 100,
+    left: 20,
+    right: 20,
+    backgroundColor: '#2ECC71',
+    borderRadius: 16,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 10,
+    zIndex: 9999,
+  },
+  toastSuccess: {
+    backgroundColor: '#2ECC71',
+  },
+  toastError: {
+    backgroundColor: '#E74C3C',
+  },
+  toastText: {
+    color: colors.white,
+    fontSize: 16,
+    fontWeight: 'bold',
+    flex: 1,
+  },
+  confirmOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  confirmCard: {
+    backgroundColor: colors.white,
+    borderRadius: 24,
+    padding: 24,
+    width: '100%',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  confirmIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#FDEDEC',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  confirmTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  confirmSubtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  confirmFooter: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  confirmButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  confirmCancelBtn: {
+    backgroundColor: '#F5F6FA',
+  },
+  confirmDeleteBtn: {
+    backgroundColor: '#E74C3C',
+  },
+  confirmCancelText: {
+    color: colors.textSecondary,
+    fontWeight: 'bold',
+  },
+  confirmDeleteText: {
+    color: '#fff',
+    fontWeight: 'bold',
   },
 });
 

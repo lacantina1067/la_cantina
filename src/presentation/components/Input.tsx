@@ -1,31 +1,56 @@
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
-import { StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native';
+import React, { useState } from 'react';
+import { StyleSheet, Text, TextInput, TextInputProps, View, ViewStyle } from 'react-native';
 import { colors } from '../theme/colors';
 
 interface InputProps extends TextInputProps {
   label: string;
   icon?: keyof typeof Ionicons.glyphMap;
+  containerStyle?: ViewStyle;
 }
 
-const Input: React.FC<InputProps> = ({ label, icon, ...props }) => {
+const Input: React.FC<InputProps> = ({ label, icon, secureTextEntry, containerStyle, ...props }) => {
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
+
+  const togglePasswordVisibility = () => {
+    setIsPasswordVisible(!isPasswordVisible);
+  };
+
+  const isSecure = secureTextEntry && !isPasswordVisible;
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.label}>{label}</Text>
-      <View style={styles.inputContainer}>
+    <View style={[styles.container, containerStyle]}>
+      <Text style={[styles.label, isFocused && styles.labelFocused]}>{label}</Text>
+      <View style={[
+        styles.inputContainer,
+        isFocused && styles.inputContainerFocused
+      ]}>
         {icon && (
-          <Ionicons 
-            name={icon} 
-            size={20} 
-            color={colors.textSecondary} 
-            style={styles.icon} 
+          <Ionicons
+            name={icon}
+            size={20}
+            color={isFocused ? colors.primary : colors.textSecondary}
+            style={styles.icon}
           />
         )}
         <TextInput
           style={styles.input}
           placeholderTextColor={colors.gray}
+          secureTextEntry={isSecure}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
           {...props}
         />
+        {secureTextEntry && (
+          <Ionicons
+            name={isPasswordVisible ? 'eye-off-outline' : 'eye-outline'}
+            size={22}
+            color={isFocused ? colors.primary : colors.textSecondary}
+            onPress={togglePasswordVisibility}
+            style={styles.rightIcon}
+          />
+        )}
       </View>
     </View>
   );
@@ -34,6 +59,7 @@ const Input: React.FC<InputProps> = ({ label, icon, ...props }) => {
 const styles = StyleSheet.create({
   container: {
     marginBottom: 20,
+    width: '100%',
   },
   label: {
     fontSize: 14,
@@ -42,31 +68,45 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 4,
   },
+  labelFocused: {
+    color: colors.primary,
+  },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 0, // Removed border
-    borderRadius: 12,
-    backgroundColor: colors.inputBackground, // Changed background
+    borderWidth: 1.5,
+    borderColor: '#F0F0F0',
+    borderRadius: 14,
+    backgroundColor: '#F8F8F8',
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
-      height: 1,
+      height: 2,
     },
     shadowOpacity: 0.05,
-    shadowRadius: 2.22,
+    shadowRadius: 3.84,
     elevation: 2,
+  },
+  inputContainerFocused: {
+    borderColor: colors.primary,
+    backgroundColor: '#fff',
+    shadowColor: colors.primary,
+    shadowOpacity: 0.1,
+    elevation: 4,
   },
   icon: {
     marginLeft: 16,
-    marginRight: 8,
+    marginRight: 4,
   },
   input: {
     flex: 1,
     padding: 16,
-    paddingLeft: 0, // Adjust padding since icon provides spacing
     fontSize: 16,
     color: colors.text,
+  },
+  rightIcon: {
+    padding: 10,
+    marginRight: 8,
   },
 });
 

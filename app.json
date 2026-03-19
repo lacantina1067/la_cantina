@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "react_native",
-    "slug": "react_native",
+    "name": "La Cantina",
+    "slug": "la-cantina",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -34,9 +34,9 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
+          "backgroundColor": "#8C6239",
           "dark": {
-            "backgroundColor": "#000000"
+            "backgroundColor": "#8C6239"
           }
         }
       ]

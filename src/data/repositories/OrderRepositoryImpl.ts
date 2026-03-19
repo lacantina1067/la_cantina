@@ -1,79 +1,247 @@
-import { Order } from '../../domain/entities/Order';
+import { Order, OrderStatus } from '../../domain/entities/Order';
+import { Product } from '../../domain/entities/Product';
+import { User, UserRole } from '../../domain/entities/User';
 import { OrderRepository } from '../../domain/repositories/OrderRepository';
-import { OrderModel, toOrder } from '../models/OrderModel';
-import { UserModel } from '../models/UserModel';
-import mockApi from '../services/ApiService';
+import { supabase } from '../../lib/supabase';
 
-const mockStudent: UserModel = {
-  id: 'student1',
-  email: 'student@test.com',
-  role: 'student',
-  firstName: 'Student',
-  lastName: 'User',
-  parentId: 'parent1',
+// Mapeo de estados entre la app y Supabase
+const statusToSupabase: Record<OrderStatus, string> = {
+  'pending_approval': 'pendiente',
+  'pending_payment': 'pendiente',
+  'approved': 'aprobado_por_padre',
+  'rejected_by_parent': 'rechazado_por_padre',
+  'preparing': 'pendiente',
+  'ready_for_pickup': 'pendiente',
+  'completed': 'completado',
+  'cancelled_by_cafeteria': 'cancelado',
 };
 
-const mockOrders: OrderModel[] = [
-  {
-    id: 'order1',
-    student: mockStudent,
-    items: [
-      { product: { id: '1', name: 'Hamburger', description: 'A delicious hamburger', price: 5.99, cost: 2.5, stock: 100 }, quantity: 1 },
-      { product: { id: '2', name: 'Fries', description: 'Crispy french fries', price: 2.99, cost: 1, stock: 200 }, quantity: 1 },
-    ],
-    total: 8.98,
-    status: 'pending_approval',
-    createdAt: new Date().getTime(),
-    updatedAt: new Date().getTime(),
-  },
-];
+const statusFromSupabase: Record<string, OrderStatus> = {
+  'pendiente': 'pending_approval',
+  'aprobado_por_padre': 'approved',
+  'rechazado_por_padre': 'rejected_by_parent',
+  'completado': 'completed',
+  'cancelado': 'cancelled_by_cafeteria',
+};
+
+const roleFromSupabase: Record<string, UserRole> = {
+  'estudiante': 'student',
+  'padre': 'parent',
+  'admin': 'cafeteria',
+};
 
 export class OrderRepositoryImpl implements OrderRepository {
   async getOrdersByStudent(studentId: string): Promise<Order[]> {
-    console.log('Getting orders for student', studentId);
-    const response = await mockApi(mockOrders);
-    return response.map(toOrder);
+    console.log('Getting orders for student:', studentId);
+
+    const { data, error } = await supabase
+      .from('orders')
+      .select(`
+        *,
+        profiles:student_id (id, nombre, email, rol),
+        order_items (
+          id,
+          cantidad,
+          precio_unitario_congelado,
+          products:product_id (id, nombre, descripcion, precio, imagen_url, esta_activo)
+        )
+      `)
+      .eq('student_id', studentId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching orders:', error);
+      throw new Error(error.message);
+    }
+
+    return (data || []).map(this.mapOrderFromSupabase);
   }
 
   async getOrdersByCafeteria(): Promise<Order[]> {
-    const response = await mockApi(mockOrders);
-    return response.map(toOrder);
+    console.log('Getting all orders for cafeteria');
+
+    const { data, error } = await supabase
+      .from('orders')
+      .select(`
+        *,
+        profiles:student_id (id, nombre, email, rol),
+        order_items (
+          id,
+          cantidad,
+          precio_unitario_congelado,
+          products:product_id (id, nombre, descripcion, precio, imagen_url, esta_activo)
+        )
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching orders:', error);
+      throw new Error(error.message);
+    }
+
+    return (data || []).map(this.mapOrderFromSupabase);
   }
 
   async getOrderById(id: string): Promise<Order | null> {
-    throw new Error('Method not implemented.');
+    console.log('Getting order by id:', id);
+
+    const { data, error } = await supabase
+      .from('orders')
+      .select(`
+        *,
+        profiles:student_id (id, nombre, email, rol),
+        order_items (
+          id,
+          cantidad,
+          precio_unitario_congelado,
+          products:product_id (id, nombre, descripcion, precio, imagen_url, esta_activo)
+        )
+      `)
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      console.error('Error fetching order:', error);
+      return null;
+    }
+
+    return this.mapOrderFromSupabase(data);
   }
 
   async createOrder(order: Omit<Order, 'id' | 'createdAt' | 'updatedAt'>): Promise<Order> {
-    throw new Error('Method not implemented.');
+    console.log('Creating order:', order);
+
+    // 1. Crear la orden principal
+    const { data: orderData, error: orderError } = await supabase
+      .from('orders')
+      .insert({
+        student_id: order.student.id,
+        monto_total: order.total,
+        estado: statusToSupabase[order.status],
+      })
+      .select()
+      .single();
+
+    if (orderError) {
+      console.error('Error creating order:', orderError);
+      throw new Error(orderError.message);
+    }
+
+    // 2. Crear los items de la orden
+    const orderItems = order.items.map(item => ({
+      order_id: orderData.id,
+      product_id: item.product.id,
+      cantidad: item.quantity,
+      precio_unitario_congelado: item.product.price,
+    }));
+
+    const { error: itemsError } = await supabase
+      .from('order_items')
+      .insert(orderItems);
+
+    if (itemsError) {
+      console.error('Error creating order items:', itemsError);
+      // Intentar eliminar la orden si falla la creación de items
+      await supabase.from('orders').delete().eq('id', orderData.id);
+      throw new Error(itemsError.message);
+    }
+
+    // 3. Obtener la orden completa con sus items
+    const createdOrder = await this.getOrderById(orderData.id);
+    if (!createdOrder) {
+      throw new Error('Failed to retrieve created order');
+    }
+
+    return createdOrder;
   }
 
-  async updateOrderStatus(orderId: string, status: Order['status']): Promise<Order> {
-    // Mock implementation - in production this would update the database
-    const orderIndex = mockOrders.findIndex(o => o.id === orderId);
-    if (orderIndex !== -1) {
-      mockOrders[orderIndex] = {
-        ...mockOrders[orderIndex],
-        status: status as any,
-        updatedAt: new Date().getTime(),
-      };
-      return toOrder(mockOrders[orderIndex]);
+  async updateOrderStatus(orderId: string, status: OrderStatus): Promise<Order> {
+    console.log('Updating order status:', orderId, status);
+
+    const { error } = await supabase
+      .from('orders')
+      .update({
+        estado: statusToSupabase[status],
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', orderId);
+
+    if (error) {
+      console.error('Error updating order status:', error);
+      throw new Error(error.message);
     }
-    throw new Error('Order not found');
+
+    const updatedOrder = await this.getOrderById(orderId);
+    if (!updatedOrder) {
+      throw new Error('Order not found after update');
+    }
+
+    return updatedOrder;
   }
 
   async updateOrderWithRejection(orderId: string, rejectionNote: string): Promise<Order> {
-    // Mock implementation - in production this would update the database
-    const orderIndex = mockOrders.findIndex(o => o.id === orderId);
-    if (orderIndex !== -1) {
-      mockOrders[orderIndex] = {
-        ...mockOrders[orderIndex],
-        status: 'rejected_by_parent' as any,
-        rejectionNote,
-        updatedAt: new Date().getTime(),
-      };
-      return toOrder(mockOrders[orderIndex]);
+    console.log('Updating order with rejection:', orderId, rejectionNote);
+
+    const { error } = await supabase
+      .from('orders')
+      .update({
+        estado: 'rechazado_por_padre',
+        rejection_note: rejectionNote,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', orderId);
+
+    if (error) {
+      console.error('Error updating order with rejection:', error);
+      throw new Error(error.message);
     }
-    throw new Error('Order not found');
+
+    const updatedOrder = await this.getOrderById(orderId);
+    if (!updatedOrder) {
+      throw new Error('Order not found after update');
+    }
+
+    return updatedOrder;
+  }
+
+  // Helper para mapear datos de Supabase a la entidad Order
+  private mapOrderFromSupabase(data: any): Order {
+    const profile = data.profiles;
+    const nameParts = profile.nombre.split(' ');
+
+    const student: User = {
+      id: profile.id,
+      email: profile.email || '',
+      role: roleFromSupabase[profile.rol] || 'student',
+      firstName: nameParts[0] || '',
+      lastName: nameParts.slice(1).join(' ') || '',
+    };
+
+    const items = (data.order_items || []).map((item: any) => {
+      const product: Product = {
+        id: item.products.id,
+        name: item.products.nombre,
+        description: item.products.descripcion || '',
+        price: item.precio_unitario_congelado,
+        cost: 0, // No tenemos este dato en Supabase
+        stock: 0, // No lo necesitamos aquí
+      };
+
+      return {
+        product,
+        quantity: item.cantidad,
+      };
+    });
+
+    return {
+      id: data.id,
+      student,
+      items,
+      total: data.monto_total,
+      status: statusFromSupabase[data.estado] || 'pending_approval',
+      createdAt: new Date(data.created_at),
+      updatedAt: new Date(data.updated_at),
+      rejectionNote: data.rejection_note,
+    };
   }
 }

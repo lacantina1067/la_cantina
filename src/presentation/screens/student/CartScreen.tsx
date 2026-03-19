@@ -35,34 +35,64 @@ const CartScreen = () => {
             return;
         }
 
+        if (!user) {
+            showModal('error', 'Error', 'Debes iniciar sesión para realizar un pedido.');
+            return;
+        }
+
         setLoading(true);
-        // Simulating order processing
-        setTimeout(() => {
+
+        try {
+            // Importar el repositorio dinámicamente
+            const { OrderRepositoryImpl } = await import('../../../data/repositories/OrderRepositoryImpl');
+            const orderRepository = new OrderRepositoryImpl();
+
+            // Crear la orden en Supabase
+            const orderItems = items.map(item => ({
+                product: {
+                    id: item.product.id,
+                    name: item.product.name,
+                    description: item.product.description || '',
+                    price: item.product.price,
+                    cost: item.product.cost || 0,
+                    stock: item.product.stock || 0,
+                },
+                quantity: item.quantity
+            }));
+
+            const newOrder = await orderRepository.createOrder({
+                student: {
+                    id: user.id,
+                    email: user.email,
+                    role: user.role,
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                },
+                items: orderItems,
+                total: getTotal(),
+                status: 'pending_approval',
+            });
+
+            console.log('Order created successfully:', newOrder);
+
+            // También guardar en el store local para actualizar la UI
+            addOrder(orderItems, getTotal());
+
             setLoading(false);
-            // Simulate success (you could add logic to simulate failure too)
-            const success = true;
-
-            if (success) {
-                // Guardar el pedido en el store
-                const orderItems = items.map(item => ({
-                    product: item.product,
-                    quantity: item.quantity
-                }));
-                addOrder(orderItems, getTotal());
-
-                showModal(
-                    'success',
-                    '¡Pedido Realizado!',
-                    'Tu pedido ha sido enviado y está esperando aprobación del representante.'
-                );
-            } else {
-                showModal(
-                    'error',
-                    'Error en el Pago',
-                    'No se pudo procesar tu pedido. Por favor intenta de nuevo.'
-                );
-            }
-        }, 1500);
+            showModal(
+                'success',
+                '¡Pedido Realizado!',
+                'Tu pedido ha sido enviado y está esperando aprobación del representante.'
+            );
+        } catch (error: any) {
+            console.error('Error creating order:', error);
+            setLoading(false);
+            showModal(
+                'error',
+                'Error al Crear Pedido',
+                error.message || 'No se pudo procesar tu pedido. Por favor intenta de nuevo.'
+            );
+        }
     };
 
     const handleModalClose = () => {

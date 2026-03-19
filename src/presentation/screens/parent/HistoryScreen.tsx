@@ -17,7 +17,10 @@ const HistoryScreen = () => {
 
     useEffect(() => {
         const fetchOrders = async () => {
-            if (!user || !user.childId) return;
+            if (!user || !user.childId) {
+                setLoading(false);
+                return;
+            }
             try {
                 const orderRepository = new OrderRepositoryImpl();
                 const getOrdersUseCase = new GetOrdersByStudentUseCase(orderRepository);

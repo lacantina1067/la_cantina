@@ -5,4 +5,5 @@ export interface AuthRepository {
   register(userData: Omit<User, 'id'> & { password: string }): Promise<User>;
   logout(): Promise<void>;
   getCurrentUser(): Promise<User | null>;
+  resetPassword(email: string): Promise<void>;
 }
