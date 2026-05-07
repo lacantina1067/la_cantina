@@ -5,10 +5,11 @@ import { supabase } from '../../lib/supabase';
 
 export class AuthRepositoryImpl implements AuthRepository {
   async login(email: string, password: string): Promise<User> {
-    console.log('Logging in with Supabase:', email);
+    const normalizedEmail = email.trim().toLowerCase();
+    console.log('Logging in with Supabase:', normalizedEmail);
 
     const { data, error } = await supabase.auth.signInWithPassword({
-      email,
+      email: normalizedEmail,
       password,
     });
 
@@ -30,7 +31,7 @@ export class AuthRepositoryImpl implements AuthRepository {
 
     if (profileError) {
       console.error('Profile error:', profileError);
-      throw new Error('Error al obtener perfil de usuario');
+      throw new Error('No se pudo cargar el perfil del usuario. Verifica el trigger on_auth_user_created en Supabase.');
     }
 
     // Mapear el rol de Supabase al rol de la app
@@ -55,9 +56,10 @@ export class AuthRepositoryImpl implements AuthRepository {
   }
 
   async register(userData: Omit<User, 'id'> & { password: string }): Promise<User> {
-    console.log('Registering user with Supabase:', userData.email);
+    const normalizedEmail = userData.email.trim().toLowerCase();
+    console.log('Registering user with Supabase:', normalizedEmail);
 
-    const { password, role, firstName, lastName, ...rest } = userData;
+    const { password, role, firstName, lastName } = userData;
 
     // Mapear el rol de la app al rol de Supabase
     const roleMap: Record<UserRole, string> = {
@@ -70,7 +72,7 @@ export class AuthRepositoryImpl implements AuthRepository {
     const nombre = `${firstName} ${lastName}`.trim();
 
     const { data, error } = await supabase.auth.signUp({
-      email: userData.email,
+      email: normalizedEmail,
       password,
       options: {
         data: {
@@ -93,7 +95,7 @@ export class AuthRepositoryImpl implements AuthRepository {
 
     return {
       id: data.user.id,
-      email: data.user.email || '',
+      email: data.user.email || normalizedEmail,
       role,
       firstName,
       lastName,

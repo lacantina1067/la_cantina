@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AuthRepositoryImpl } from '../../../data/repositories/AuthRepositoryImpl';
 import { UserRepositoryImpl } from '../../../data/repositories/UserRepositoryImpl';
 import { UserRole } from '../../../domain/entities/User';
 import { RegisterUseCase } from '../../../domain/usecases/RegisterUseCase';
+import { supabase } from '../../../lib/supabase';
 import { hasBadWords, isValidEmail, isValidName, isValidPassword } from '../../../utils/validation';
 import Button from '../../components/Button';
 import Input from '../../components/Input';
@@ -80,12 +81,22 @@ const RegisterScreen = () => {
       const authRepository = new AuthRepositoryImpl();
       const registerUseCase = new RegisterUseCase(authRepository);
       const user = await registerUseCase.execute({
-        email,
+        email: email.trim().toLowerCase(),
         password,
-        firstName,
-        lastName,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
         role,
       });
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        Alert.alert(
+          'Cuenta creada',
+          'Tu cuenta fue creada correctamente. Revisa tu correo para confirmar la cuenta antes de iniciar sesión.'
+        );
+        (navigation as any).navigate('Login');
+        return;
+      }
 
       // Si es representante y proporcionó un correo de hijo, intentar vincular
       if (role === 'parent' && childEmail.trim()) {
@@ -113,8 +124,22 @@ const RegisterScreen = () => {
       }
 
       login(user);
-    } catch (e) {
-      setError('Error al registrarse. Por favor intenta de nuevo.');
+    } catch (e: any) {
+      const message = e?.message || '';
+
+      if (message.includes('User already registered')) {
+        setError('Este correo ya está registrado. Intenta iniciar sesión.');
+      } else if (message.includes('Password should be at least')) {
+        setError('La contraseña no cumple el mínimo requerido por Supabase.');
+      } else if (
+        message.includes('Database error saving new user') ||
+        message.includes('No se pudo cargar el perfil') ||
+        message.includes('on_auth_user_created')
+      ) {
+        setError('Tu cuenta no pudo completarse por un error de base de datos. Revisa el trigger de creación de perfiles en Supabase.');
+      } else {
+        setError(message || 'Error al registrarse. Por favor intenta de nuevo.');
+      }
     } finally {
       setLoading(false);
     }

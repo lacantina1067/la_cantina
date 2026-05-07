@@ -81,10 +81,20 @@ const LoginScreen = () => {
         try {
             const authRepository = new AuthRepositoryImpl();
             const loginUseCase = new LoginUseCase(authRepository);
-            const user = await loginUseCase.execute(email, password);
+            const user = await loginUseCase.execute(email.trim().toLowerCase(), password);
             login(user);
-        } catch (e) {
-            setError('Error al iniciar sesión. Por favor verifica tus credenciales.');
+        } catch (e: any) {
+            const message = e?.message || '';
+
+            if (message.includes('Invalid login credentials')) {
+                setError('Credenciales inválidas. Verifica tu correo y contraseña.');
+            } else if (message.includes('Email not confirmed')) {
+                setError('Debes confirmar tu correo antes de iniciar sesión.');
+            } else if (message.includes('No se pudo cargar el perfil del usuario')) {
+                setError('La cuenta existe, pero falta el perfil en base de datos. Revisa el trigger on_auth_user_created en Supabase.');
+            } else {
+                setError(message || 'Error al iniciar sesión. Por favor verifica tus credenciales.');
+            }
         } finally {
             setLoading(false);
         }

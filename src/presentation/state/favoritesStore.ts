@@ -3,6 +3,38 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { Product } from '../../domain/entities/Product';
 
+const memoryStore = new Map<string, string>();
+
+const memoryStorage = {
+    getItem: (key: string) => memoryStore.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+        memoryStore.set(key, value);
+    },
+    removeItem: (key: string) => {
+        memoryStore.delete(key);
+    },
+};
+
+const getSafePersistStorage = () => {
+    const localStorageRef = (globalThis as any)?.localStorage;
+    if (localStorageRef) {
+        try {
+            const testKey = '__cantiapp_favorites_test__';
+            localStorageRef.setItem(testKey, 'ok');
+            localStorageRef.removeItem(testKey);
+            return localStorageRef;
+        } catch {
+            // Ignore and fallback
+        }
+    }
+
+    if (AsyncStorage && typeof AsyncStorage.getItem === 'function') {
+        return AsyncStorage;
+    }
+
+    return memoryStorage;
+};
+
 interface FavoritesStore {
     favorites: Product[];
     addFavorite: (product: Product) => void;
@@ -42,7 +74,7 @@ export const useFavoritesStore = create<FavoritesStore>()(
         }),
         {
             name: 'favorites-storage',
-            storage: createJSONStorage(() => AsyncStorage),
+            storage: createJSONStorage(getSafePersistStorage),
         }
     )
 );
