@@ -1,77 +1,93 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
-import React, { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { AuthRepositoryImpl } from '../../../data/repositories/AuthRepositoryImpl';
-import { UserRepositoryImpl } from '../../../data/repositories/UserRepositoryImpl';
-import { UserRole } from '../../../domain/entities/User';
-import { RegisterUseCase } from '../../../domain/usecases/RegisterUseCase';
-import { supabase } from '../../../lib/supabase';
-import { hasBadWords, isValidEmail, isValidName, isValidPassword } from '../../../utils/validation';
-import Button from '../../components/Button';
-import Input from '../../components/Input';
-import { useAuthStore } from '../../state/authStore';
-import { colors } from '../../theme/colors';
+import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
+import React, { useState } from "react";
+import {
+    Alert,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native";
+import { AuthRepositoryImpl } from "../../../data/repositories/AuthRepositoryImpl";
+import { UserRepositoryImpl } from "../../../data/repositories/UserRepositoryImpl";
+import { UserRole } from "../../../domain/entities/User";
+import { RegisterUseCase } from "../../../domain/usecases/RegisterUseCase";
+import { supabase } from "../../../lib/supabase";
+import {
+    hasBadWords,
+    isValidEmail,
+    isValidName,
+    isValidPassword,
+} from "../../../utils/validation";
+import Button from "../../components/Button";
+import Input from "../../components/Input";
+import { useAuthStore } from "../../state/authStore";
+import { colors } from "../../theme/colors";
 
 const RegisterScreen = () => {
   const navigation = useNavigation();
   const { login } = useAuthStore();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [role, setRole] = useState<UserRole>('student');
-  const [childEmail, setChildEmail] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [role, setRole] = useState<UserRole>("student");
+  const [childEmail, setChildEmail] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   const handleRegister = async () => {
     setLoading(true);
-    setError('');
+    setError("");
 
     // Validations
     if (!isValidName(firstName)) {
-      setError('El nombre ingresado no es válido. Debe tener entre 2 y 50 caracteres alfabéticos.');
+      setError(
+        "El nombre ingresado no es válido. Debe tener entre 2 y 50 caracteres alfabéticos.",
+      );
       setLoading(false);
       return;
     }
     if (hasBadWords(firstName)) {
-      setError('El nombre contiene palabras no permitidas.');
+      setError("El nombre contiene palabras no permitidas.");
       setLoading(false);
       return;
     }
 
     if (!isValidName(lastName)) {
-      setError('El apellido ingresado no es válido. Debe tener entre 2 y 50 caracteres alfabéticos.');
+      setError(
+        "El apellido ingresado no es válido. Debe tener entre 2 y 50 caracteres alfabéticos.",
+      );
       setLoading(false);
       return;
     }
     if (hasBadWords(lastName)) {
-      setError('El apellido contiene palabras no permitidas.');
+      setError("El apellido contiene palabras no permitidas.");
       setLoading(false);
       return;
     }
 
     if (!isValidEmail(email)) {
-      setError('El correo electrónico no es válido.');
+      setError("El correo electrónico no es válido.");
       setLoading(false);
       return;
     }
 
     if (!isValidPassword(password)) {
-      setError('La contraseña debe tener al menos 6 caracteres.');
+      setError("La contraseña debe tener al menos 6 caracteres.");
       setLoading(false);
       return;
     }
 
-    if (role === 'parent') {
+    if (role === "parent") {
       if (!childEmail.trim()) {
-        setError('El email del estudiante es obligatorio para representantes.');
+        setError("El email del estudiante es obligatorio para representantes.");
         setLoading(false);
         return;
       }
       if (!isValidEmail(childEmail)) {
-        setError('El email del estudiante no tiene un formato válido.');
+        setError("El email del estudiante no tiene un formato válido.");
         setLoading(false);
         return;
       }
@@ -91,20 +107,22 @@ const RegisterScreen = () => {
       const { data: sessionData } = await supabase.auth.getSession();
       if (!sessionData.session) {
         Alert.alert(
-          'Cuenta creada',
-          'Tu cuenta fue creada correctamente. Revisa tu correo para confirmar la cuenta antes de iniciar sesión.'
+          "Cuenta creada",
+          "Tu cuenta fue creada correctamente. Revisa tu correo para confirmar la cuenta antes de iniciar sesión.",
         );
-        (navigation as any).navigate('Login');
+        (navigation as any).navigate("Login");
         return;
       }
 
       // Si es representante y proporcionó un correo de hijo, intentar vincular
-      if (role === 'parent' && childEmail.trim()) {
+      if (role === "parent" && childEmail.trim()) {
         try {
           const userRepository = new UserRepositoryImpl();
-          const student = await userRepository.getUserByEmail(childEmail.trim());
+          const student = await userRepository.getUserByEmail(
+            childEmail.trim(),
+          );
 
-          if (student && student.role === 'student') {
+          if (student && student.role === "student") {
             // 1. Vincular en el perfil del padre (el usuario que se acaba de registrar)
             const updatedParent = { ...user, childId: student.id };
             await userRepository.updateUser(updatedParent);
@@ -118,34 +136,46 @@ const RegisterScreen = () => {
             return;
           }
         } catch (linkError) {
-          console.error('Error linking child during registration:', linkError);
+          console.error("Error linking child during registration:", linkError);
           // No bloqueamos el flujo principal si falla el vínculo, el usuario ya se creó
         }
       }
 
       login(user);
     } catch (e: any) {
-      const message = e?.message || '';
+      const message = e?.message || "";
 
-      if (message.includes('User already registered')) {
-        setError('Este correo ya está registrado. Intenta iniciar sesión.');
-      } else if (message.includes('Password should be at least')) {
-        setError('La contraseña no cumple el mínimo requerido por Supabase.');
+      if (message.includes("User already registered")) {
+        setError("Este correo ya está registrado. Intenta iniciar sesión.");
+      } else if (message.includes("Password should be at least")) {
+        setError("La contraseña no cumple el mínimo requerido por Supabase.");
       } else if (
-        message.includes('Database error saving new user') ||
-        message.includes('No se pudo cargar el perfil') ||
-        message.includes('on_auth_user_created')
+        message.includes("Database error saving new user") ||
+        message.includes("No se pudo cargar el perfil") ||
+        message.includes("on_auth_user_created")
       ) {
-        setError('Tu cuenta no pudo completarse por un error de base de datos. Revisa el trigger de creación de perfiles en Supabase.');
+        setError(
+          "Tu cuenta no pudo completarse por un error de base de datos. Revisa el trigger de creación de perfiles en Supabase.",
+        );
       } else {
-        setError(message || 'Error al registrarse. Por favor intenta de nuevo.');
+        setError(
+          message || "Error al registrarse. Por favor intenta de nuevo.",
+        );
       }
     } finally {
       setLoading(false);
     }
   };
 
-  const RoleOption = ({ value, label, icon }: { value: UserRole; label: string; icon: string }) => {
+  const RoleOption = ({
+    value,
+    label,
+    icon,
+  }: {
+    value: UserRole;
+    label: string;
+    icon: string;
+  }) => {
     const isSelected = role === value;
     return (
       <TouchableOpacity
@@ -153,17 +183,30 @@ const RegisterScreen = () => {
         onPress={() => setRole(value)}
         activeOpacity={0.8}
       >
-        <View style={[styles.iconContainer, isSelected && styles.iconContainerSelected]}>
+        <View
+          style={[
+            styles.iconContainer,
+            isSelected && styles.iconContainerSelected,
+          ]}
+        >
           <Ionicons
             name={icon as any}
             size={24}
             color={isSelected ? colors.white : colors.textSecondary}
           />
         </View>
-        <Text style={[styles.roleLabel, isSelected && styles.roleLabelSelected]}>{label}</Text>
+        <Text
+          style={[styles.roleLabel, isSelected && styles.roleLabelSelected]}
+        >
+          {label}
+        </Text>
         {isSelected && (
           <View style={styles.checkIcon}>
-            <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+            <Ionicons
+              name="checkmark-circle"
+              size={20}
+              color={colors.primary}
+            />
           </View>
         )}
       </TouchableOpacity>
@@ -172,7 +215,10 @@ const RegisterScreen = () => {
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.headerContainer}>
           <TouchableOpacity
             style={styles.backButton}
@@ -218,7 +264,7 @@ const RegisterScreen = () => {
             icon="lock-closed-outline"
           />
 
-          {role === 'parent' && (
+          {role === "parent" && (
             <Input
               label="Email del Estudiante (Obligatorio)"
               value={childEmail}
@@ -233,23 +279,39 @@ const RegisterScreen = () => {
           <View style={styles.roleContainer}>
             <Text style={styles.label}>Selecciona tu Rol</Text>
             <View style={styles.rolesGrid}>
-              <RoleOption value="student" label="Estudiante" icon="school-outline" />
-              <RoleOption value="parent" label="Representante" icon="people-outline" />
-              <RoleOption value="cafeteria" label="Cantina" icon="restaurant-outline" />
+              <RoleOption
+                value="student"
+                label="Estudiante"
+                icon="school-outline"
+              />
+              <RoleOption
+                value="parent"
+                label="Representante"
+                icon="people-outline"
+              />
+              <RoleOption
+                value="cafeteria"
+                label="Cantina"
+                icon="restaurant-outline"
+              />
             </View>
           </View>
 
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
           <View style={styles.buttonContainer}>
-            <Button title="Registrarse" onPress={handleRegister} loading={loading} />
+            <Button
+              title="Registrarse"
+              onPress={handleRegister}
+              loading={loading}
+            />
           </View>
 
           <View style={styles.loginLinkContainer}>
             <Text style={styles.loginLinkText}>¿Ya tienes una cuenta?</Text>
             <TouchableOpacity
               style={styles.loginButtonOutline}
-              onPress={() => (navigation as any).navigate('Login')}
+              onPress={() => (navigation as any).navigate("Login")}
               activeOpacity={0.7}
             >
               <Text style={styles.loginButtonText}>Iniciar Sesión</Text>
@@ -268,31 +330,31 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
+    justifyContent: "center",
     padding: 24,
     paddingTop: 60,
   },
   headerContainer: {
     marginBottom: 32,
-    alignItems: 'center',
-    width: '100%',
-    position: 'relative',
+    alignItems: "center",
+    width: "100%",
+    position: "relative",
   },
   backButton: {
-    position: 'absolute',
+    position: "absolute",
     left: 0,
     top: 4,
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#F0F2F5',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#F0F2F5",
+    justifyContent: "center",
+    alignItems: "center",
     zIndex: 10,
   },
   title: {
     fontSize: 32,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     color: colors.text,
     marginBottom: 8,
   },
@@ -301,7 +363,7 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   formContainer: {
-    width: '100%',
+    width: "100%",
   },
   roleContainer: {
     marginBottom: 24,
@@ -311,15 +373,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginBottom: 12,
     color: colors.textSecondary,
-    fontWeight: '500',
+    fontWeight: "500",
     marginLeft: 4,
   },
   rolesGrid: {
     gap: 12,
   },
   roleOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
@@ -329,15 +391,15 @@ const styles = StyleSheet.create({
   },
   roleOptionSelected: {
     borderColor: colors.primary,
-    backgroundColor: '#FFF8F0', // Light orange tint
+    backgroundColor: "#FFF8F0", // Light orange tint
   },
   iconContainer: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F0F2F5',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#F0F2F5",
+    justifyContent: "center",
+    alignItems: "center",
     marginRight: 16,
   },
   iconContainerSelected: {
@@ -346,12 +408,12 @@ const styles = StyleSheet.create({
   roleLabel: {
     fontSize: 16,
     color: colors.text,
-    fontWeight: '500',
+    fontWeight: "500",
     flex: 1,
   },
   roleLabelSelected: {
     color: colors.primary,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   checkIcon: {
     marginLeft: 8,
@@ -361,14 +423,14 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: colors.danger,
-    textAlign: 'center',
+    textAlign: "center",
     marginBottom: 16,
     fontSize: 14,
   },
   loginLinkContainer: {
     marginTop: 24,
-    width: '100%',
-    alignItems: 'center',
+    width: "100%",
+    alignItems: "center",
     gap: 16,
     paddingBottom: 20,
   },
@@ -377,18 +439,18 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   loginButtonOutline: {
-    width: '100%',
+    width: "100%",
     paddingVertical: 16,
     borderRadius: 16,
     borderWidth: 1.5,
     borderColor: colors.primary,
-    backgroundColor: 'transparent',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "transparent",
+    alignItems: "center",
+    justifyContent: "center",
   },
   loginButtonText: {
     color: colors.primary,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     fontSize: 16,
   },
 });
