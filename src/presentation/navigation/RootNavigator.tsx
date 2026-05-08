@@ -1,15 +1,16 @@
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import * as Linking from 'expo-linking';
-import React, { useEffect, useState } from 'react';
-import { AuthRepositoryImpl } from '../../data/repositories/AuthRepositoryImpl';
-import { GetCurrentUserUseCase } from '../../domain/usecases/GetCurrentUserUseCase';
-import { supabase } from '../../lib/supabase';
-import LoginScreen from '../screens/auth/LoginScreen';
-import RegisterScreen from '../screens/auth/RegisterScreen';
-import ResetPasswordScreen from '../screens/auth/ResetPasswordScreen';
-import SplashScreen from '../screens/SplashScreen';
-import { useAuthStore } from '../state/authStore';
-import MainNavigator from './MainNavigator';
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import * as Linking from "expo-linking";
+import React, { useEffect, useState } from "react";
+import { Platform } from "react-native";
+import { AuthRepositoryImpl } from "../../data/repositories/AuthRepositoryImpl";
+import { GetCurrentUserUseCase } from "../../domain/usecases/GetCurrentUserUseCase";
+import { supabase } from "../../lib/supabase";
+import LoginScreen from "../screens/auth/LoginScreen";
+import RegisterScreen from "../screens/auth/RegisterScreen";
+import ResetPasswordScreen from "../screens/auth/ResetPasswordScreen";
+import SplashScreen from "../screens/SplashScreen";
+import { useAuthStore } from "../state/authStore";
+import MainNavigator from "./MainNavigator";
 
 const Stack = createNativeStackNavigator();
 
@@ -21,20 +22,28 @@ const Root = () => {
   useEffect(() => {
     const initApp = async () => {
       // Mínimo tiempo de splash screen para que se aprecie la animación
-      const minSplashTime = new Promise(resolve => setTimeout(resolve, 2000));
+      const minSplashTime = new Promise((resolve) => setTimeout(resolve, 2000));
+      const authCheckTimeout = new Promise((resolve) =>
+        setTimeout(resolve, Platform.OS === "web" ? 1200 : 2500),
+      );
 
       const checkUser = async () => {
         try {
           const authRepository = new AuthRepositoryImpl();
-          const getCurrentUserUseCase = new GetCurrentUserUseCase(authRepository);
+          const getCurrentUserUseCase = new GetCurrentUserUseCase(
+            authRepository,
+          );
           const user = await getCurrentUserUseCase.execute();
           setUser(user);
         } catch (error) {
-          console.log('No user session found');
+          console.log("No user session found");
         }
       };
 
-      await Promise.all([minSplashTime, checkUser()]);
+      await Promise.all([
+        minSplashTime,
+        Promise.race([checkUser(), authCheckTimeout]),
+      ]);
       setIsAppReady(true);
     };
 
@@ -43,18 +52,20 @@ const Root = () => {
     // Manejar Deep Links para recuperación de contraseña
     const handleDeepLink = async (url: string | null) => {
       if (!url) return;
-      console.log('Deep link recibido:', url);
+      console.log("Deep link recibido:", url);
 
       // Supabase envía el token en el fragmento (#) de la URL
-      if (url.includes('#access_token') || url.includes('access_token=')) {
+      if (url.includes("#access_token") || url.includes("access_token=")) {
         // Extraer tokens del fragmento
-        const fragment = url.includes('#') ? url.split('#')[1] : url.split('?')[1];
+        const fragment = url.includes("#")
+          ? url.split("#")[1]
+          : url.split("?")[1];
         const params = new URLSearchParams(fragment);
-        const accessToken = params.get('access_token');
-        const refreshToken = params.get('refresh_token');
+        const accessToken = params.get("access_token");
+        const refreshToken = params.get("refresh_token");
 
         if (accessToken && refreshToken) {
-          console.log('Tokens extraídos, estableciendo sesión...');
+          console.log("Tokens extraídos, estableciendo sesión...");
           const { error } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
@@ -63,15 +74,18 @@ const Root = () => {
           if (!error) {
             setIsResettingPassword(true);
           } else {
-            console.error('Error estableciendo sesión de recuperación:', error.message);
+            console.error(
+              "Error estableciendo sesión de recuperación:",
+              error.message,
+            );
           }
         }
-      } else if (url.includes('reset-password')) {
+      } else if (url.includes("reset-password")) {
         setIsResettingPassword(true);
       }
     };
 
-    const subscription = Linking.addEventListener('url', (event) => {
+    const subscription = Linking.addEventListener("url", (event) => {
       handleDeepLink(event.url);
     });
 
@@ -90,7 +104,9 @@ const Root = () => {
   }
 
   if (isResettingPassword) {
-    return <ResetPasswordScreen onComplete={() => setIsResettingPassword(false)} />;
+    return (
+      <ResetPasswordScreen onComplete={() => setIsResettingPassword(false)} />
+    );
   }
 
   return (

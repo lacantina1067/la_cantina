@@ -1,9 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { Platform } from "react-native";
 import { Product } from "../../domain/entities/Product";
 
 const memoryStore = new Map<string, string>();
+const STORAGE_KEY = "favorites-storage";
 
 const memoryStorage = {
   getItem: (key: string) => memoryStore.get(key) ?? null,
@@ -35,6 +36,38 @@ const getSafePersistStorage = () => {
   return memoryStorage;
 };
 
+const persistFavorites = async (favorites: Product[]) => {
+  const serializedFavorites = JSON.stringify(favorites);
+
+  if (Platform.OS === "web") {
+    const storage = getSafePersistStorage();
+    storage.setItem(STORAGE_KEY, serializedFavorites);
+    return;
+  }
+
+  try {
+    await AsyncStorage.setItem(STORAGE_KEY, serializedFavorites);
+  } catch {
+    const storage = getSafePersistStorage();
+    storage.setItem(STORAGE_KEY, serializedFavorites);
+  }
+};
+
+const loadFavorites = async () => {
+  try {
+    if (Platform.OS === "web") {
+      const storage = typeof window !== "undefined" ? getSafePersistStorage() : memoryStorage;
+      const rawFavorites = storage.getItem(STORAGE_KEY);
+      return rawFavorites ? (JSON.parse(rawFavorites) as Product[]) : [];
+    }
+
+    const rawFavorites = await AsyncStorage.getItem(STORAGE_KEY);
+    return rawFavorites ? (JSON.parse(rawFavorites) as Product[]) : [];
+  } catch {
+    return [];
+  }
+};
+
 interface FavoritesStore {
   favorites: Product[];
   addFavorite: (product: Product) => void;
@@ -43,38 +76,40 @@ interface FavoritesStore {
   toggleFavorite: (product: Product) => void;
 }
 
-export const useFavoritesStore = create<FavoritesStore>()(
-  persist(
-    (set, get) => ({
-      favorites: [],
+export const useFavoritesStore = create<FavoritesStore>((set, get) => ({
+  favorites: [],
 
-      addFavorite: (product: Product) => {
-        const favorites = get().favorites;
-        if (!favorites.find((p) => p.id === product.id)) {
-          set({ favorites: [...favorites, product] });
-        }
-      },
+  addFavorite: (product: Product) => {
+    const favorites = get().favorites;
+    if (!favorites.find((p) => p.id === product.id)) {
+      const nextFavorites = [...favorites, product];
+      set({ favorites: nextFavorites });
+      void persistFavorites(nextFavorites);
+    }
+  },
 
-      removeFavorite: (productId: string) => {
-        set({ favorites: get().favorites.filter((p) => p.id !== productId) });
-      },
+  removeFavorite: (productId: string) => {
+    const nextFavorites = get().favorites.filter((p) => p.id !== productId);
+    set({ favorites: nextFavorites });
+    void persistFavorites(nextFavorites);
+  },
 
-      isFavorite: (productId: string) => {
-        return !!get().favorites.find((p) => p.id === productId);
-      },
+  isFavorite: (productId: string) => {
+    return !!get().favorites.find((p) => p.id === productId);
+  },
 
-      toggleFavorite: (product: Product) => {
-        const isFav = get().isFavorite(product.id);
-        if (isFav) {
-          get().removeFavorite(product.id);
-        } else {
-          get().addFavorite(product);
-        }
-      },
-    }),
-    {
-      name: "favorites-storage",
-      storage: createJSONStorage(getSafePersistStorage),
-    },
-  ),
-);
+  toggleFavorite: (product: Product) => {
+    const isFav = get().isFavorite(product.id);
+    if (isFav) {
+      get().removeFavorite(product.id);
+      return;
+    }
+
+    get().addFavorite(product);
+  },
+}));
+
+void (async () => {
+  const favorites = await loadFavorites();
+  useFavoritesStore.setState({ favorites });
+})();
