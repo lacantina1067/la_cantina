@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { create } from "zustand";
 import { Platform } from "react-native";
+import { create } from "zustand";
 import { Product } from "../../domain/entities/Product";
 
 const memoryStore = new Map<string, string>();
@@ -56,7 +56,8 @@ const persistFavorites = async (favorites: Product[]) => {
 const loadFavorites = async () => {
   try {
     if (Platform.OS === "web") {
-      const storage = typeof window !== "undefined" ? getSafePersistStorage() : memoryStorage;
+      const storage =
+        typeof window !== "undefined" ? getSafePersistStorage() : memoryStorage;
       const rawFavorites = storage.getItem(STORAGE_KEY);
       return rawFavorites ? (JSON.parse(rawFavorites) as Product[]) : [];
     }
